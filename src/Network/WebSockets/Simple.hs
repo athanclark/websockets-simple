@@ -81,6 +81,7 @@ toServerAppT wsApp pending = do
   toClientAppT' wsApp conn
 
 
+
 data WebSocketSimpleError
   = JSONParseError ByteString
   deriving (Generic, Eq, Show)
