@@ -9,7 +9,7 @@
 
 module Network.WebSockets.Simple where
 
-import Network.WebSockets (DataMessage (..), sendTextData, receiveDataMessage)
+import Network.WebSockets (DataMessage (..), sendTextData, receiveDataMessage, acceptRequest)
 import Network.Wai.Trans (ServerAppT, ClientAppT)
 import Data.Aeson (ToJSON (..), FromJSON (..))
 import qualified Data.Aeson as Aeson
@@ -27,24 +27,15 @@ import Data.Typeable (Typeable)
 
 
 data WebSocketsApp send receive m = WebSocketsApp
-  { onOpen :: (send -> m ()) -> m ()
+  { onOpen    :: (send -> m ()) -> m ()
   , onReceive :: (send -> m ()) -> receive -> m ()
   } deriving (Generic, Typeable)
 
 
-data WebSocketSimpleError
-  = JSONParseError ByteString
-  deriving (Generic, Eq, Show)
-
-instance Exception WebSocketSimpleError
-
-
-data WebSocketsAppThreads = WebSocketsAppThreads
-  { onOpenThread     :: Async ()
-  , onReceiveThreads :: TChan (Async ())
-  }
-
-
+-- | This can throw a 'WebSocketSimpleError' when json parsing fails. However, do note:
+--   the 'onOpen' is called once, but is still forked when called. Likewise, the 'onReceive'
+--   function is called /every time/ a (parsable) response is received from the other party,
+--   and is forked on every invocation.
 toClientAppT :: forall send receive m
               . ( ToJSON send
                 , FromJSON receive
@@ -82,3 +73,22 @@ toClientAppT WebSocketsApp{onOpen,onReceive} = \conn -> do
 
 toClientAppT' :: (ToJSON send, FromJSON receive, MonadBaseControl IO m, MonadThrow m) => WebSocketsApp send receive m -> ClientAppT m ()
 toClientAppT' wsApp conn = void (toClientAppT wsApp conn)
+
+
+toServerAppT :: (ToJSON send, FromJSON receive, MonadBaseControl IO m, MonadThrow m) => WebSocketsApp send receive m -> ServerAppT m
+toServerAppT wsApp pending = do
+  conn <- liftBaseWith $ \_ -> acceptRequest pending
+  toClientAppT' wsApp conn
+
+
+data WebSocketSimpleError
+  = JSONParseError ByteString
+  deriving (Generic, Eq, Show)
+
+instance Exception WebSocketSimpleError
+
+
+data WebSocketsAppThreads = WebSocketsAppThreads
+  { onOpenThread     :: Async ()
+  , onReceiveThreads :: TChan (Async ())
+  }
