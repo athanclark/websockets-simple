@@ -34,6 +34,16 @@ data WebSocketsApp send receive m = WebSocketsApp
   } deriving (Generic, Typeable)
 
 
+hoistWebSocketsApp :: (forall a. m a -> n a)
+                   -> (forall a. n a -> m a)
+                   -> WebSocketsApp send receive m
+                   -> WebSocketsApp send receive n
+hoistWebSocketsApp f coF WebSocketsApp{onOpen,onReceive} = WebSocketsApp
+  { onOpen = \send -> f $ onOpen (coF . send)
+  , onReceive = \send r -> f $ onReceive (coF . send) r
+  }
+
+
 -- | This can throw a 'WebSocketSimpleError' when json parsing fails. However, do note:
 --   the 'onOpen' is called once, but is still forked when called. Likewise, the 'onReceive'
 --   function is called /every time/ a (parsable) response is received from the other party,
