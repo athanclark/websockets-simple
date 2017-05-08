@@ -63,7 +63,7 @@ toClientAppT WebSocketsApp{onOpen,onReceive} conn = do
               forever $ do
                 data' <- liftBaseWith $ \_ -> receiveDataMessage conn
                 let data'' = case data' of
-                              Text xs -> xs
+                              Text xs _ -> xs
                               Binary xs -> xs
                 case Aeson.decode data'' of
                   Nothing -> throwM (JSONParseError data'')
