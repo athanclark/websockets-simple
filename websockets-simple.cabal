@@ -16,10 +16,12 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Network.WebSockets.Simple
+                       Network.WebSockets.Simple.PingPong
   build-depends:       base >= 4.8 && < 5
                      , aeson
                      , async
                      , bytestring
+                     , every >= 0.0.1
                      , exceptions
                      , monad-control
                      , stm

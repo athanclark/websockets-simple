@@ -92,7 +92,11 @@ toClientAppT WebSocketsApp{onOpen,onReceive} conn = do
                 toWait <- readIORef toWaitVar
                 writeIORef toWaitVar (toWait+1)
                 let second = 1000000
-                threadDelay $ second * (2^toWait)
+                    origDelayTime = 2^toWait
+                    threadDelayTime
+                      | origDelayTime > 5*60*origDelayTime = 5*60 -- limit at 5 mins
+                      | otherwise = origDelayTime
+                threadDelay $ second * threadDelayTime
               go
         in  go' `catch` onDisconnect
   go
