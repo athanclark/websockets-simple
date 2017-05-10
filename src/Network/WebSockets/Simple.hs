@@ -9,12 +9,13 @@
 
 module Network.WebSockets.Simple where
 
-import Network.WebSockets (DataMessage (..), sendTextData, receiveDataMessage, acceptRequest, ConnectionException)
+import Network.WebSockets (DataMessage (..), sendTextData, sendClose, receiveDataMessage, acceptRequest, ConnectionException (CloseRequest))
 import Network.Wai.Trans (ServerAppT, ClientAppT)
 import Data.Aeson (ToJSON (..), FromJSON (..))
 import qualified Data.Aeson as Aeson
 import Data.ByteString.Lazy (ByteString)
 import Data.IORef (newIORef, writeIORef, readIORef)
+import Data.Word (Word16)
 
 import Control.Monad (void, forever)
 import Control.Monad.Catch (Exception, throwM, MonadThrow, catch, MonadCatch)
@@ -28,9 +29,17 @@ import GHC.Generics (Generic)
 import Data.Typeable (Typeable)
 
 
+
+data WebSocketsAppParams send m = WebSocketsAppParams
+  { send  :: send -> m ()
+  , close :: m ()
+  } deriving (Generic, Typeable)
+
+
 data WebSocketsApp send receive m = WebSocketsApp
-  { onOpen    :: (send -> m ()) -> m ()
-  , onReceive :: (send -> m ()) -> receive -> m ()
+  { onOpen    :: WebSocketsAppParams send m -> m ()
+  , onReceive :: WebSocketsAppParams send m -> receive -> m ()
+  , onClose   :: Maybe (Word16, ByteString) -> m () -- ^ Either was a clean close, with 'Network.WebSockets.CloseRequest' params, or was unclean
   } deriving (Generic, Typeable)
 
 
@@ -38,9 +47,10 @@ hoistWebSocketsApp :: (forall a. m a -> n a)
                    -> (forall a. n a -> m a)
                    -> WebSocketsApp send receive m
                    -> WebSocketsApp send receive n
-hoistWebSocketsApp f coF WebSocketsApp{onOpen,onReceive} = WebSocketsApp
-  { onOpen = \send -> f $ onOpen (coF . send)
-  , onReceive = \send r -> f $ onReceive (coF . send) r
+hoistWebSocketsApp f coF WebSocketsApp{onOpen,onReceive,onClose} = WebSocketsApp
+  { onOpen = \WebSocketsAppParams{send,close} -> f $ onOpen WebSocketsAppParams{send = coF . send, close = coF close}
+  , onReceive = \WebSocketsAppParams{send,close} r -> f $ onReceive WebSocketsAppParams{send = coF . send, close = coF close} r
+  , onClose = f . onClose
   }
 
 
@@ -57,7 +67,7 @@ toClientAppT :: forall send receive m
                 )
              => WebSocketsApp send receive m
              -> ClientAppT m (Maybe WebSocketsAppThreads)
-toClientAppT WebSocketsApp{onOpen,onReceive} conn = do
+toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
   toWaitVar <- liftBaseWith $ \_ -> newIORef (0 :: Int)
   let go =
         let go' = do
@@ -65,8 +75,14 @@ toClientAppT WebSocketsApp{onOpen,onReceive} conn = do
               let send :: send -> m ()
                   send x = liftBaseWith $ \_ -> sendTextData conn (Aeson.encode x)
 
+                  close :: m ()
+                  close = liftBaseWith $ \_ -> sendClose conn (Aeson.encode "requesting close")
+
+                  params :: WebSocketsAppParams send m
+                  params = WebSocketsAppParams{send,close}
+
               onOpenThread <- liftBaseWith $ \runToBase ->
-                async $ void $ runToBase $ onOpen send
+                async $ void $ runToBase $ onOpen params
 
               onReceiveThreads <- liftBaseWith $ \_ -> newTChanIO
 
@@ -78,7 +94,7 @@ toClientAppT WebSocketsApp{onOpen,onReceive} conn = do
                 case Aeson.decode data'' of
                   Nothing -> throwM (JSONParseError data'')
                   Just received -> liftBaseWith $ \runToBase -> do
-                    thread <- async $ void $ runToBase $ onReceive send received
+                    thread <- async $ void $ runToBase $ onReceive params received
                     atomically $ writeTChan onReceiveThreads thread
 
               pure $ Just WebSocketsAppThreads
@@ -87,7 +103,10 @@ toClientAppT WebSocketsApp{onOpen,onReceive} conn = do
                 }
 
             onDisconnect :: ConnectionException -> m (Maybe WebSocketsAppThreads)
-            onDisconnect _ = do
+            onDisconnect err = do
+              case err of
+                CloseRequest code reason -> onClose (Just (code,reason))
+                _                        -> onClose Nothing
               liftBaseWith $ \_ -> do
                 toWait <- readIORef toWaitVar
                 writeIORef toWaitVar (toWait+1)

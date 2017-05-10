@@ -5,7 +5,7 @@
 
 module Network.WebSockets.Simple.PingPong where
 
-import Network.WebSockets.Simple (WebSocketsApp (..))
+import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..))
 
 import Data.Aeson (ToJSON (..), FromJSON (..))
 import Data.Aeson.Types (Value (Array))
@@ -34,24 +34,25 @@ pingPong :: ( MonadBaseControl IO m
          => Int -- ^ Delay in microseconds
          -> WebSocketsApp send receive m
          -> m (WebSocketsApp (PingPong send) (PingPong receive) m)
-pingPong delay WebSocketsApp{onOpen,onReceive} = do
+pingPong delay WebSocketsApp{onOpen,onReceive,onClose} = do
   counterVar <- liftBaseWith $ \_ -> newTVarIO Nothing
 
   let halfDelay = delay `div` 2
 
   pure WebSocketsApp
-    { onOpen = \send -> do
+    { onOpen = \WebSocketsAppParams{send,close} -> do
         liftBaseWith $ \runInBase -> do
           counter <- every delay (Just halfDelay) $ runInBase $
             send (PingPong Nothing)
           atomically $ writeTVar counterVar (Just counter)
-        onOpen (send . PingPong . Just)
-    , onReceive = \send (PingPong mPingPong) -> do
+        onOpen WebSocketsAppParams{send = send . PingPong . Just, close}
+    , onReceive = \WebSocketsAppParams{send,close} (PingPong mPingPong) ->
         case mPingPong of
           Nothing -> liftBaseWith $ \_ -> do
             mCounter <- atomically $ readTVar counterVar
             case mCounter of
               Nothing -> error "somehow received message before socket was opened"
               Just counter -> reset (Just halfDelay) counter
-          Just r -> onReceive (send . PingPong . Just) r
+          Just r -> onReceive WebSocketsAppParams{send = send . PingPong . Just, close} r
+    , onClose
     }
