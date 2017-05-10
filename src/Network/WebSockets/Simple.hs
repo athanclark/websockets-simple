@@ -84,7 +84,6 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
                   params = WebSocketsAppParams{send,close}
 
               onOpenThread <- liftBaseWith $ \runToBase -> do
-                writeIORef soFarVar 0
                 async $ void $ runToBase $ onOpen params
 
               onReceiveThreads <- liftBaseWith $ \_ -> newTChanIO
@@ -99,6 +98,8 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
                   Just received -> liftBaseWith $ \runToBase -> do
                     thread <- async $ void $ runToBase $ onReceive params received
                     atomically $ writeTChan onReceiveThreads thread
+
+              liftBaseWith $ \_ -> writeIORef soFarVar 0
 
               pure $ Just WebSocketsAppThreads
                 { onOpenThread
