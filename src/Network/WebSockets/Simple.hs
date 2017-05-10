@@ -112,9 +112,11 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
                 _                        -> onClose Nothing
               canGo <- liftBaseWith $ \_ -> do
                 soFar <- readIORef soFarVar
+                putStrLn $ "so far: " ++ show soFar
                 case backoffStrategy soFar of
                   Nothing -> pure False -- give up
                   Just delay -> do
+                    putStrLn $ "next delay: " ++ show delay
                     writeIORef soFarVar (soFar + delay)
                     threadDelay delay
                     pure True
