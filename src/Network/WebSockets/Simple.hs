@@ -39,10 +39,10 @@ data WebSocketsAppParams send m = WebSocketsAppParams
 data WebSocketsApp send receive m = WebSocketsApp
   { onOpen    :: WebSocketsAppParams send m -> m ()
   , onReceive :: WebSocketsAppParams send m -> receive -> m ()
-  , onClose   :: Maybe (Word16, ByteString) -> m (Int -> Maybe Int) -- ^ Either was a clean close, with 'Network.WebSockets.CloseRequest' params, or was unclean.
-                                                                    --   Returns a function which defines the backoff strategy - takes in total time (microseconds)
-                                                                    --   elapsed during connection closed, and may return a new delay before attempting to connect again;
-                                                                    --   if none, then it won't try again.
+  , onClose   :: Maybe (Word16, ByteString) -> m () -- ^ Either was a clean close, with 'Network.WebSockets.CloseRequest' params, or was unclean.
+                                                    --   Note that to implement backoff strategies, you should catch your 'Network.WebSockets.ConnectionException'
+                                                    --   /outside/ this simple app, and only after you've 'Network.WebSockets.runClient' or server, because the
+                                                    --   'Network.WebSockets.Connection' will be different.
   } deriving (Generic, Typeable)
 
 
@@ -71,7 +71,6 @@ toClientAppT :: forall send receive m
              => WebSocketsApp send receive m
              -> ClientAppT m (Maybe WebSocketsAppThreads)
 toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
-  soFarVar <- liftBaseWith $ \_ -> newIORef (0 :: Int)
   let go = do
         let send :: send -> m ()
             send x = liftBaseWith $ \_ -> sendTextData conn (Aeson.encode x)
@@ -82,12 +81,12 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
             params :: WebSocketsAppParams send m
             params = WebSocketsAppParams{send,close}
 
-        onOpenThread <- liftBaseWith $ \runToBase -> do
+        onOpenThread <- liftBaseWith $ \runToBase ->
           async $ void $ runToBase $ onOpen params
 
         onReceiveThreads <- liftBaseWith $ \_ -> newTChanIO
 
-        forever $ do
+        void $ forever $ do
           data' <- liftBaseWith $ \_ -> receiveDataMessage conn
           let data'' = case data' of
                         Text xs _ -> xs
@@ -98,8 +97,6 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
               thread <- async $ void $ runToBase $ onReceive params received
               atomically $ writeTChan onReceiveThreads thread
 
-        liftBaseWith $ \_ -> writeIORef soFarVar 0
-
         pure $ Just WebSocketsAppThreads
           { onOpenThread
           , onReceiveThreads
@@ -107,22 +104,10 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
 
       onDisconnect :: ConnectionException -> m (Maybe WebSocketsAppThreads)
       onDisconnect err = do
-        backoffStrategy <- case err of
+        case err of
           CloseRequest code reason -> onClose (Just (code,reason))
           _                        -> onClose Nothing
-        canGo <- liftBaseWith $ \_ -> do
-          soFar <- readIORef soFarVar
-          putStrLn $ "so far: " ++ show soFar
-          case backoffStrategy soFar of
-            Nothing -> pure False -- give up
-            Just delay -> do
-              putStrLn $ "next delay: " ++ show delay
-              writeIORef soFarVar (soFar + delay)
-              soFar' <- readIORef soFarVar
-              putStrLn $ "new so far: " ++ show soFar'
-              threadDelay delay
-              pure True
-        if canGo then go `catch` onDisconnect else pure Nothing
+        pure Nothing
 
   go `catch` onDisconnect
 
