@@ -39,7 +39,10 @@ data WebSocketsAppParams send m = WebSocketsAppParams
 data WebSocketsApp send receive m = WebSocketsApp
   { onOpen    :: WebSocketsAppParams send m -> m ()
   , onReceive :: WebSocketsAppParams send m -> receive -> m ()
-  , onClose   :: Maybe (Word16, ByteString) -> m () -- ^ Either was a clean close, with 'Network.WebSockets.CloseRequest' params, or was unclean
+  , onClose   :: Maybe (Word16, ByteString) -> m (Int -> Maybe Int) -- ^ Either was a clean close, with 'Network.WebSockets.CloseRequest' params, or was unclean.
+                                                                    --   Returns a function which defines the backoff strategy - takes in total time (microseconds)
+                                                                    --   elapsed during connection closed, and may return a new delay before attempting to connect again;
+                                                                    --   if none, then it won't try again.
   } deriving (Generic, Typeable)
 
 
@@ -68,10 +71,10 @@ toClientAppT :: forall send receive m
              => WebSocketsApp send receive m
              -> ClientAppT m (Maybe WebSocketsAppThreads)
 toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
-  toWaitVar <- liftBaseWith $ \_ -> newIORef (0 :: Int)
+  soFarVar <- liftBaseWith $ \_ -> newIORef (0 :: Int)
   let go =
         let go' = do
-              liftBaseWith $ \_ -> writeIORef toWaitVar 0
+              liftBaseWith $ \_ -> writeIORef soFarVar 0
               let send :: send -> m ()
                   send x = liftBaseWith $ \_ -> sendTextData conn (Aeson.encode x)
 
@@ -104,19 +107,19 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
 
             onDisconnect :: ConnectionException -> m (Maybe WebSocketsAppThreads)
             onDisconnect err = do
-              case err of
+              backoffStrategy <- case err of
                 CloseRequest code reason -> onClose (Just (code,reason))
                 _                        -> onClose Nothing
-              liftBaseWith $ \_ -> do
-                toWait <- readIORef toWaitVar
-                writeIORef toWaitVar (toWait+1)
-                let second = 1000000
-                    origDelayTime = 2^toWait
-                    threadDelayTime
-                      | origDelayTime > 5*60*origDelayTime = 5*60 -- limit at 5 mins
-                      | otherwise = origDelayTime
-                threadDelay $ second * threadDelayTime
-              go
+              canGo <- liftBaseWith $ \_ -> do
+                soFar <- readIORef soFarVar
+                case backoffStrategy soFar of
+                  Nothing -> pure False -- give up
+                  Just delay -> do
+                    writeIORef soFarVar (soFar + delay)
+                    threadDelay delay
+                    pure True
+              if canGo then go else pure Nothing
+
         in  go' `catch` onDisconnect
   go
 
