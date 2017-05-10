@@ -72,61 +72,59 @@ toClientAppT :: forall send receive m
              -> ClientAppT m (Maybe WebSocketsAppThreads)
 toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
   soFarVar <- liftBaseWith $ \_ -> newIORef (0 :: Int)
-  let go =
-        let go' = do
-              let send :: send -> m ()
-                  send x = liftBaseWith $ \_ -> sendTextData conn (Aeson.encode x)
+  let go = do
+        let send :: send -> m ()
+            send x = liftBaseWith $ \_ -> sendTextData conn (Aeson.encode x)
 
-                  close :: m ()
-                  close = liftBaseWith $ \_ -> sendClose conn (Aeson.encode "requesting close")
+            close :: m ()
+            close = liftBaseWith $ \_ -> sendClose conn (Aeson.encode "requesting close")
 
-                  params :: WebSocketsAppParams send m
-                  params = WebSocketsAppParams{send,close}
+            params :: WebSocketsAppParams send m
+            params = WebSocketsAppParams{send,close}
 
-              onOpenThread <- liftBaseWith $ \runToBase -> do
-                async $ void $ runToBase $ onOpen params
+        onOpenThread <- liftBaseWith $ \runToBase -> do
+          async $ void $ runToBase $ onOpen params
 
-              onReceiveThreads <- liftBaseWith $ \_ -> newTChanIO
+        onReceiveThreads <- liftBaseWith $ \_ -> newTChanIO
 
-              forever $ do
-                data' <- liftBaseWith $ \_ -> receiveDataMessage conn
-                let data'' = case data' of
-                              Text xs _ -> xs
-                              Binary xs -> xs
-                case Aeson.decode data'' of
-                  Nothing -> throwM (JSONParseError data'')
-                  Just received -> liftBaseWith $ \runToBase -> do
-                    thread <- async $ void $ runToBase $ onReceive params received
-                    atomically $ writeTChan onReceiveThreads thread
+        forever $ do
+          data' <- liftBaseWith $ \_ -> receiveDataMessage conn
+          let data'' = case data' of
+                        Text xs _ -> xs
+                        Binary xs -> xs
+          case Aeson.decode data'' of
+            Nothing -> throwM (JSONParseError data'')
+            Just received -> liftBaseWith $ \runToBase -> do
+              thread <- async $ void $ runToBase $ onReceive params received
+              atomically $ writeTChan onReceiveThreads thread
 
-              liftBaseWith $ \_ -> writeIORef soFarVar 0
+        liftBaseWith $ \_ -> writeIORef soFarVar 0
 
-              pure $ Just WebSocketsAppThreads
-                { onOpenThread
-                , onReceiveThreads
-                }
+        pure $ Just WebSocketsAppThreads
+          { onOpenThread
+          , onReceiveThreads
+          }
 
-            onDisconnect :: ConnectionException -> m (Maybe WebSocketsAppThreads)
-            onDisconnect err = do
-              backoffStrategy <- case err of
-                CloseRequest code reason -> onClose (Just (code,reason))
-                _                        -> onClose Nothing
-              canGo <- liftBaseWith $ \_ -> do
-                soFar <- readIORef soFarVar
-                putStrLn $ "so far: " ++ show soFar
-                case backoffStrategy soFar of
-                  Nothing -> pure False -- give up
-                  Just delay -> do
-                    putStrLn $ "next delay: " ++ show delay
-                    writeIORef soFarVar (soFar + delay)
-                    soFar' <- readIORef soFarVar
-                    putStrLn $ "new so far: " ++ show soFar'
-                    threadDelay delay
-                    pure True
-              if canGo then go else pure Nothing
+      onDisconnect :: ConnectionException -> m (Maybe WebSocketsAppThreads)
+      onDisconnect err = do
+        backoffStrategy <- case err of
+          CloseRequest code reason -> onClose (Just (code,reason))
+          _                        -> onClose Nothing
+        canGo <- liftBaseWith $ \_ -> do
+          soFar <- readIORef soFarVar
+          putStrLn $ "so far: " ++ show soFar
+          case backoffStrategy soFar of
+            Nothing -> pure False -- give up
+            Just delay -> do
+              putStrLn $ "next delay: " ++ show delay
+              writeIORef soFarVar (soFar + delay)
+              soFar' <- readIORef soFarVar
+              putStrLn $ "new so far: " ++ show soFar'
+              threadDelay delay
+              pure True
+        if canGo then go `catch` onDisconnect else pure Nothing
 
-        in  go' `catch` onDisconnect
-  go
+  go `catch` onDisconnect
 
 
 
