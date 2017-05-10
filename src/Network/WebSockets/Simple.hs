@@ -118,6 +118,8 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
                   Just delay -> do
                     putStrLn $ "next delay: " ++ show delay
                     writeIORef soFarVar (soFar + delay)
+                    soFar' <- readIORef soFarVar
+                    putStrLn $ "new so far: " ++ show soFar'
                     threadDelay delay
                     pure True
               if canGo then go else pure Nothing
