@@ -74,7 +74,6 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
   soFarVar <- liftBaseWith $ \_ -> newIORef (0 :: Int)
   let go =
         let go' = do
-              liftBaseWith $ \_ -> writeIORef soFarVar 0
               let send :: send -> m ()
                   send x = liftBaseWith $ \_ -> sendTextData conn (Aeson.encode x)
 
@@ -84,7 +83,8 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
                   params :: WebSocketsAppParams send m
                   params = WebSocketsAppParams{send,close}
 
-              onOpenThread <- liftBaseWith $ \runToBase ->
+              onOpenThread <- liftBaseWith $ \runToBase -> do
+                writeIORef soFarVar 0
                 async $ void $ runToBase $ onOpen params
 
               onReceiveThreads <- liftBaseWith $ \_ -> newTChanIO
