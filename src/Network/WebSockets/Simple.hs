@@ -124,6 +124,36 @@ toServerAppT wsApp pending = do
 
 
 
+-- | A simple backoff strategy, which (per second), will increasingly delay at @2^soFar@, until @soFar >= 5minutes@, where it will then routinely poll every
+--   5 minutes.
+expBackoffStrategy :: forall m a
+                    . ( MonadBaseControl IO m
+                      , MonadCatch m
+                      )
+                   => m a -- ^ The run app
+                   -> m a
+expBackoffStrategy app = do
+  soFarVar <- liftBaseWith $ \_ -> newIORef (0 :: Int)
+
+  let second = 1000000
+
+  let go = app `catch` backoffStrat
+
+      backoffStrat :: ConnectionException -> m a
+      backoffStrat _ = do
+        liftBaseWith $ \_ -> do
+          soFar <- readIORef soFarVar
+          let delay
+                | soFar >= 5 * 60 = 5 * 60
+                | otherwise       = 2 ^ soFar
+          writeIORef soFarVar (soFar + delay)
+          threadDelay (delay * second)
+        go
+
+  go
+
+
+
 data WebSocketSimpleError
   = JSONParseError ByteString
   deriving (Generic, Eq, Show)
