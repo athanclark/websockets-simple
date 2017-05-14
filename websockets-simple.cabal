@@ -1,5 +1,5 @@
 name:                websockets-simple
-version:             0.0.5
+version:             0.0.6
 synopsis:            Simpler interface to the websockets api
 -- description:
 homepage:            https://github.com/athanclark/websockets-simple#readme
