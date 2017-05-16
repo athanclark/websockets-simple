@@ -14,7 +14,7 @@ import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Concurrent.Async (Async, async)
 import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TChan (TChan, newTChanIO, writeTChan, readTChan)
+import Control.Concurrent.STM.TChan (TChan, newTChan, writeTChan, readTChan)
 
 
 
@@ -27,7 +27,7 @@ runConnected :: forall send receive m
              -> WebSocketsApp receive send m
              -> m (Async (), Async (), TChan send, TChan receive)
 runConnected sendsSreceivesR sendsRreceivesS = do
-  (sendChan, receiveChan) <- liftIO $ (,) <$> newTChanIO <*> newTChanIO
+  (sendChan, receiveChan) <- liftIO $ atomically $ (,) <$> newTChan <*> newTChan
 
   let sendToSend :: send -> m ()
       sendToSend s = liftIO $ atomically $ writeTChan sendChan s
