@@ -15,7 +15,7 @@ import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async)
 import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TChan (TChan, newTChan, writeTChan, readTChan, tryReadTChan)
+import Control.Concurrent.STM.TChan (TChan, newTChan, writeTChan, readTChan, tryReadTChan, isEmptyTChan)
 
 
 
@@ -42,24 +42,20 @@ runConnected sendsSreceivesR sendsRreceivesS = do
         onClose sendsSreceivesR Nothing
 
   sToR <- liftBaseWith $ \runInBase -> async $ forever $ do
-    mS <- atomically $ tryReadTChan sendChan
-    case mS of
-      Nothing -> threadDelay 100
-      Just s ->
-        void $ runInBase $ onReceive sendsRreceivesS WebSocketsAppParams
-          { send = sendToReceive
-          , close
-          } s
+    _ <- atomically $ isEmptyTChan sendChan
+    s <- atomically $ readTChan sendChan
+    void $ runInBase $ onReceive sendsRreceivesS WebSocketsAppParams
+      { send = sendToReceive
+      , close
+      } s
 
   rToS <- liftBaseWith $ \runInBase -> async $ forever $ do
-    mR <- atomically $ tryReadTChan receiveChan
-    case mR of
-      Nothing -> threadDelay 100
-      Just r ->
-        void $ runInBase $ onReceive sendsSreceivesR WebSocketsAppParams
-          { send = sendToSend
-          , close
-          } r
+    _ <- atomically $ isEmptyTChan receiveChan
+    r <- atomically $ readTChan receiveChan
+    void $ runInBase $ onReceive sendsSreceivesR WebSocketsAppParams
+      { send = sendToSend
+      , close
+      } r
 
   onOpen sendsRreceivesS WebSocketsAppParams
     { send = sendToReceive
