@@ -15,7 +15,7 @@ import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async)
 import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TChan (TChan, newTChan, writeTChan, readTChan, tryReadTChan, isEmptyTChan)
+import Control.Concurrent.STM.TChan (TChan, newTChan, writeTChan, readTChan, isEmptyTChan)
 
 
 
