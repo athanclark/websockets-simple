@@ -111,8 +111,8 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
 
   onOpen params
 
-  receivingThread <- liftBaseWith $ \runInBase -> async $ forever $
-    let go' = do
+  receivingThread <- liftBaseWith $ \runInBase -> async $
+    let go' = forever $ do
           data' <- receiveDataMessage conn
           let data'' = case data' of
                         Text xs _ -> xs
@@ -120,7 +120,7 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
           case Aeson.decode data'' of
             Nothing -> throwM (JSONParseError data'')
             Just received -> runInBase (onReceive params received)
-    in  go' `catch` (runInBase . onClose)
+    in  go' `catch` (\e -> () <$ runInBase (onClose e))
 
   liftIO (link receivingThread)
 

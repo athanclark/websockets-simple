@@ -1,0 +1,71 @@
+name:                example
+version:             0.1.0.0
+github:              "athanclark/example"
+license:             BSD3
+author:              "Athan Clark"
+maintainer:          "athan.clark@gmail.com"
+copyright:           "BSD-3"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on Github at <https://github.com/athanclark/example#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- aeson
+
+library:
+  source-dirs: src
+
+executables:
+  example-server:
+    main:                Main.hs
+    source-dirs:         server
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - example
+    - websockets
+    - websockets-simple >= 0.0.7
+    - stm
+    - async
+    - wai-transformers
+    - warp
+    - wai-middleware-content-type
+    - http-types
+
+  example-client:
+    main:                Main.hs
+    source-dirs:         client
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - example
+    - websockets
+    - websockets-simple >= 0.0.7
+    - stm
+    - async
+
+tests:
+  example-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - example
