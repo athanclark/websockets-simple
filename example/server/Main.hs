@@ -24,14 +24,14 @@ import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar, mod
 main :: IO ()
 main = do
   s <- server
-  let s' = -- toServerAppT s
-           \pending -> do
-             conn <- acceptRequest pending
-             putStrLn "Accepted..."
-             sendTextData conn ("Uh..." :: Text)
-             forever $ do
-               x <- receiveDataMessage conn
-               putStrLn $ "Got: " ++ show x
+  let s' = toServerAppT s
+           -- \pending -> do
+           --   conn <- acceptRequest pending
+           --   putStrLn "Accepted..."
+           --   sendTextData conn ("Uh..." :: Text)
+           --   forever $ do
+           --     x <- receiveDataMessage conn
+           --     putStrLn $ "Got: " ++ show x
   run 3000 (websocketsOrT id defaultConnectionOptions s' defApp)
   where
     defApp :: Application

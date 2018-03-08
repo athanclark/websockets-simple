@@ -4,7 +4,7 @@
 
 module Main where
 
-import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..), toClientAppT', expBackoffStrategy)
+import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..), toClientAppT, expBackoffStrategy)
 import Lib (Input (..), Output (..))
 
 import Network.WebSockets (runClient)
@@ -25,7 +25,7 @@ main = do
   forever $ do
     _ <- atomically $ readTChan invokeChan
     putStrLn "Opening..."
-    runClient "localhost" 3000 "/" (toClientAppT' c)
+    runClient "localhost" 3000 "/" (toClientAppT c)
 
 
 client :: TChan () -> IO (WebSocketsApp IO Output Input)
