@@ -44,6 +44,7 @@ server = do
         putStrLn "Opened..."
         thread <- async $ forever $ do
           count <- readTVarIO countRef
+          putStrLn $ "Sending: " ++ show (Value count)
           send (Value count)
           putStrLn $ "Sent: " ++ show (Value count)
           threadDelay (10^6)
@@ -58,10 +59,11 @@ server = do
         if count >= 10 || count <= -10
           then close
           else do
+            putStrLn $ "Sending Response: " ++ show (Value count)
             send (Value count)
             putStrLn $ "Sent Response: " ++ show (Value count)
     , onClose = \e -> do
         putStrLn $ "Closing... " ++ show e
-        -- killEmitter
-        -- atomically $ writeTVar countRef 0
+        killEmitter
+        atomically $ writeTVar countRef 0
     }

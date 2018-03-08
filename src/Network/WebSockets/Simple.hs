@@ -101,10 +101,10 @@ toClientAppT :: forall send receive m
              -> ClientAppT m WebSocketsAppThreads
 toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
   let send :: send -> m ()
-      send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` onClose
+      send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` (\e -> liftIO (putStrLn "Closing from send:") >> onClose e)
 
       close :: m ()
-      close = liftIO (sendClose conn (Aeson.encode "requesting close")) `catch` onClose
+      close = liftIO (sendClose conn (Aeson.encode "requesting close")) `catch` (\e -> liftIO (putStrLn "Closing from close:") >> onClose e)
 
       params :: WebSocketsAppParams m send
       params = WebSocketsAppParams{send,close}
@@ -120,7 +120,7 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
           case Aeson.decode data'' of
             Nothing -> throwM (JSONParseError data'')
             Just received -> runInBase (onReceive params received)
-    in  go' `catch` (\e -> () <$ runInBase (onClose e))
+    in  go' `catch` (\e -> () <$ (putStrLn "Closing from receiveDataMessage:" *> runInBase (onClose e)))
 
   liftIO (link receivingThread)
 
@@ -147,9 +147,8 @@ toServerAppT :: ( ToJSON send
                 , MonadThrow m
                 , MonadCatch m
                 ) => WebSocketsApp m receive send -> ServerAppT m
-toServerAppT wsApp pending = do
-  conn <- liftBaseWith $ \_ -> acceptRequest pending
-  toClientAppT' wsApp conn
+toServerAppT wsApp pending =
+  liftIO (acceptRequest pending) >>= toClientAppT' wsApp
 
 
 

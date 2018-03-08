@@ -35,14 +35,17 @@ resolver: lts-10.8
 #  - wai
 packages:
 - .
-- location: 
+- location:
+    git: https://github.com/athanclark/websockets-simple.git
+    commit: 026584d58be99432466b954a16f3a44f2db97438
+  extra-dep: true
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps:
   - wai-middleware-content-type-0.5.2
   - nested-routes-8.0.1
-  - websockets-simple-0.0.7
+  # - websockets-simple-0.0.7
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

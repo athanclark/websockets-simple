@@ -20,12 +20,12 @@ main = do
 
   c <- client invokeChan
 
-  void $ async $ forever $ do
+  atomically $ writeTChan invokeChan ()
+
+  forever $ do
     _ <- atomically $ readTChan invokeChan
     putStrLn "Opening..."
-    runClient "ws://localhost" 3000 "/" (toClientAppT' c)
-
-  atomically $ writeTChan invokeChan ()
+    runClient "localhost" 3000 "/" (toClientAppT' c)
 
 
 client :: TChan () -> IO (WebSocketsApp IO Output Input)
@@ -39,5 +39,7 @@ client invokeChan = do
           send Increment
           putStrLn $ "Sent: " ++ show Increment
           threadDelay (10^6)
-    , onClose
+    , onClose = \e -> do
+        putStrLn $ "Closing: " ++ show e
+        onClose e
     }
