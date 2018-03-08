@@ -5,51 +5,68 @@
   , ScopedTypeVariables
   , NamedFieldPuns
   , FlexibleContexts
+  , InstanceSigs
   #-}
 
-module Network.WebSockets.Simple where
+module Network.WebSockets.Simple
+  ( -- * Types
+    WebSocketsApp (..), WebSocketsAppParams (..), WebSocketsAppThreads (..)
+  , Network.WebSockets.ConnectionException (..), WebSocketsSimpleError (..)
+  , -- * Running
+    toClientAppT, toClientAppT', toServerAppT
+  , -- * Utilities
+    expBackoffStrategy
+  , hoistWebSocketsApp
+  ) where
 
-import Network.WebSockets (DataMessage (..), sendTextData, sendClose, receiveDataMessage, acceptRequest, ConnectionException (CloseRequest))
+import Network.WebSockets (DataMessage (..), sendTextData, sendClose, receiveDataMessage, acceptRequest, ConnectionException (..))
 import Network.Wai.Trans (ServerAppT, ClientAppT)
+import Data.Profunctor (Profunctor (..))
 import Data.Aeson (ToJSON (..), FromJSON (..))
 import qualified Data.Aeson as Aeson
 import Data.ByteString.Lazy (ByteString)
-import Data.IORef (newIORef, writeIORef, readIORef)
-import Data.Word (Word16)
 
 import Control.Monad (void, forever)
+import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Catch (Exception, throwM, MonadThrow, catch, MonadCatch)
 import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (Async, async)
-import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TChan (TChan, newTChanIO, writeTChan)
+import Control.Concurrent.Async (Async, async, link)
+import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar)
 
 import GHC.Generics (Generic)
 import Data.Typeable (Typeable)
 
 
 
-data WebSocketsAppParams send m = WebSocketsAppParams
+data WebSocketsAppParams m send = WebSocketsAppParams
   { send  :: send -> m ()
   , close :: m ()
   } deriving (Generic, Typeable)
 
 
-data WebSocketsApp send receive m = WebSocketsApp
-  { onOpen    :: WebSocketsAppParams send m -> m ()
-  , onReceive :: WebSocketsAppParams send m -> receive -> m ()
-  , onClose   :: Maybe (Word16, ByteString) -> m () -- ^ Either was a clean close, with 'Network.WebSockets.CloseRequest' params, or was unclean.
-                                                    --   Note that to implement backoff strategies, you should catch your 'Network.WebSockets.ConnectionException'
-                                                    --   /outside/ this simple app, and only after you've 'Network.WebSockets.runClient' or server, because the
-                                                    --   'Network.WebSockets.Connection' will be different.
+data WebSocketsApp m receive send = WebSocketsApp
+  { onOpen    :: WebSocketsAppParams m send -> m ()
+  , onReceive :: WebSocketsAppParams m send -> receive -> m ()
+  , onClose   :: ConnectionException -> m () -- ^ Should be re-entrant; this exception is caught in all uses of 'send', even if used in a dead 'Network.WebSockets.Connection' in a lingering thread.
   } deriving (Generic, Typeable)
+
+instance Profunctor (WebSocketsApp m) where
+  dimap :: forall a b c d. (a -> b) -> (c -> d) -> WebSocketsApp m b c -> WebSocketsApp m a d
+  dimap receiveF sendF WebSocketsApp{onOpen,onReceive,onClose} = WebSocketsApp
+    { onOpen = \params -> onOpen (getParams params)
+    , onReceive = \params r -> onReceive (getParams params) (receiveF r)
+    , onClose = onClose
+    }
+    where
+      getParams :: WebSocketsAppParams m d -> WebSocketsAppParams m c
+      getParams WebSocketsAppParams{send,close} = WebSocketsAppParams{send = send . sendF,close}
 
 
 hoistWebSocketsApp :: (forall a. m a -> n a)
                    -> (forall a. n a -> m a)
-                   -> WebSocketsApp send receive m
-                   -> WebSocketsApp send receive n
+                   -> WebSocketsApp m receive send
+                   -> WebSocketsApp n receive send
 hoistWebSocketsApp f coF WebSocketsApp{onOpen,onReceive,onClose} = WebSocketsApp
   { onOpen = \WebSocketsAppParams{send,close} -> f $ onOpen WebSocketsAppParams{send = coF . send, close = coF close}
   , onReceive = \WebSocketsAppParams{send,close} r -> f $ onReceive WebSocketsAppParams{send = coF . send, close = coF close} r
@@ -57,67 +74,79 @@ hoistWebSocketsApp f coF WebSocketsApp{onOpen,onReceive,onClose} = WebSocketsApp
   }
 
 
--- | This can throw a 'WebSocketSimpleError' when json parsing fails. However, do note:
---   the 'onOpen' is called once, but is still forked when called. Likewise, the 'onReceive'
---   function is called /every time/ a (parsable) response is received from the other party,
---   and is forked on every invocation.
+
+instance Applicative m => Monoid (WebSocketsApp m receive send) where
+  mempty = WebSocketsApp
+    { onOpen = \_ -> pure ()
+    , onReceive = \_ _ -> pure ()
+    , onClose = \_ -> pure ()
+    }
+  mappend x y = WebSocketsApp
+    { onOpen = \params -> onOpen x params *> onOpen y params
+    , onReceive = \params r -> onReceive x params r *> onReceive y params r
+    , onClose = \mE -> onClose x mE *> onClose y mE
+    }
+
+
+-- | This can throw a 'WebSocketSimpleError' to the main thread via 'Control.Concurrent.Async.link' when json parsing fails.
 toClientAppT :: forall send receive m
               . ( ToJSON send
                 , FromJSON receive
+                , MonadIO m
                 , MonadBaseControl IO m
                 , MonadThrow m
                 , MonadCatch m
                 )
-             => WebSocketsApp send receive m
-             -> ClientAppT m (Maybe WebSocketsAppThreads)
+             => WebSocketsApp m receive send
+             -> ClientAppT m WebSocketsAppThreads
 toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
-  let go = do
-        let send :: send -> m ()
-            send x = liftBaseWith $ \_ -> sendTextData conn (Aeson.encode x)
+  let send :: send -> m ()
+      send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` onClose
 
-            close :: m ()
-            close = liftBaseWith $ \_ -> sendClose conn (Aeson.encode "requesting close")
+      close :: m ()
+      close = liftIO (sendClose conn (Aeson.encode "requesting close")) `catch` onClose
 
-            params :: WebSocketsAppParams send m
-            params = WebSocketsAppParams{send,close}
+      params :: WebSocketsAppParams m send
+      params = WebSocketsAppParams{send,close}
 
-        onOpenThread <- liftBaseWith $ \runToBase ->
-          async $ void $ runToBase $ onOpen params
+  onOpen params
 
-        onReceiveThreads <- liftBaseWith $ \_ -> newTChanIO
-
-        void $ forever $ do
-          data' <- liftBaseWith $ \_ -> receiveDataMessage conn
+  receivingThread <- liftBaseWith $ \runInBase -> async $ forever $
+    let go' = do
+          data' <- receiveDataMessage conn
           let data'' = case data' of
                         Text xs _ -> xs
                         Binary xs -> xs
           case Aeson.decode data'' of
             Nothing -> throwM (JSONParseError data'')
-            Just received -> liftBaseWith $ \runToBase -> do
-              thread <- async $ void $ runToBase $ onReceive params received
-              atomically $ writeTChan onReceiveThreads thread
+            Just received -> runInBase (onReceive params received)
+    in  go' `catch` (runInBase . onClose)
 
-        pure $ Just WebSocketsAppThreads
-          { onOpenThread
-          , onReceiveThreads
-          }
+  liftIO (link receivingThread)
 
-      onDisconnect :: ConnectionException -> m (Maybe WebSocketsAppThreads)
-      onDisconnect err = do
-        case err of
-          CloseRequest code reason -> onClose (Just (code,reason))
-          _                        -> onClose Nothing
-        pure Nothing
-
-  go `catch` onDisconnect
+  pure $ WebSocketsAppThreads
+    { wsAppReceivingThread = receivingThread
+    }
 
 
 
-toClientAppT' :: (ToJSON send, FromJSON receive, MonadBaseControl IO m, MonadThrow m, MonadCatch m) => WebSocketsApp send receive m -> ClientAppT m ()
+toClientAppT' :: ( ToJSON send
+                 , FromJSON receive
+                 , MonadIO m
+                 , MonadBaseControl IO m
+                 , MonadThrow m
+                 , MonadCatch m
+                 ) => WebSocketsApp m receive send -> ClientAppT m ()
 toClientAppT' wsApp conn = void (toClientAppT wsApp conn)
 
 
-toServerAppT :: (ToJSON send, FromJSON receive, MonadBaseControl IO m, MonadThrow m, MonadCatch m) => WebSocketsApp send receive m -> ServerAppT m
+toServerAppT :: ( ToJSON send
+                , FromJSON receive
+                , MonadIO m
+                , MonadBaseControl IO m
+                , MonadThrow m
+                , MonadCatch m
+                ) => WebSocketsApp m receive send -> ServerAppT m
 toServerAppT wsApp pending = do
   conn <- liftBaseWith $ \_ -> acceptRequest pending
   toClientAppT' wsApp conn
@@ -127,41 +156,34 @@ toServerAppT wsApp pending = do
 -- | A simple backoff strategy, which (per second), will increasingly delay at @2^soFar@, until @soFar >= 5minutes@, where it will then routinely poll every
 --   5 minutes.
 expBackoffStrategy :: forall m a
-                    . ( MonadBaseControl IO m
-                      , MonadCatch m
+                    . ( MonadIO m
                       )
-                   => m a -- ^ The run app
-                   -> m a
-expBackoffStrategy app = do
-  soFarVar <- liftBaseWith $ \_ -> newIORef (0 :: Int)
+                   => m a -- ^ Action to call, like pinging a scoped channel to trigger the reconnect
+                   -> m (ConnectionException -> m a)
+expBackoffStrategy action = do
+  soFarVar <- liftIO $ newTVarIO (0 :: Int)
 
   let second = 1000000
 
-  let go = app `catch` backoffStrat
-
-      backoffStrat :: ConnectionException -> m a
-      backoffStrat _ = do
-        liftBaseWith $ \_ -> do
-          soFar <- readIORef soFarVar
-          let delay
-                | soFar >= 5 * 60 = 5 * 60
-                | otherwise       = 2 ^ soFar
-          writeIORef soFarVar (soFar + delay)
-          threadDelay (delay * second)
-        go
-
-  go
+  pure $ \_ -> do
+    liftIO $ do
+      soFar <- readTVarIO soFarVar
+      let delay
+            | soFar >= 5 * 60 = 5 * 60
+            | otherwise       = 2 ^ soFar
+      atomically $ writeTVar soFarVar (soFar + delay)
+      threadDelay (delay * second)
+    action
 
 
 
-data WebSocketSimpleError
+data WebSocketsSimpleError
   = JSONParseError ByteString
   deriving (Generic, Eq, Show)
 
-instance Exception WebSocketSimpleError
+instance Exception WebSocketsSimpleError
 
 
-data WebSocketsAppThreads = WebSocketsAppThreads
-  { onOpenThread     :: Async ()
-  , onReceiveThreads :: TChan (Async ())
+newtype WebSocketsAppThreads = WebSocketsAppThreads
+  { wsAppReceivingThread :: Async ()
   }

@@ -1,0 +1,48 @@
+name: websockets-simple
+version: 0.0.7
+synopsis: Composable websockets clients
+description: See README at <https://github.com/athanclark/websockets-simple#readme>
+maintainer: Athan Clark <athan.clark@gmail.com>
+license: BSD-3-Clause
+github: athanclark/websockets-simple
+category: Web
+extra-source-files:
+  - README.md
+
+ghc-options: -Wall
+
+dependencies:
+  - base >= 4.9 && < 5
+  - aeson
+  - async
+  - bytestring
+  - every >= 0.0.1
+  - exceptions
+  - monad-control
+  - profunctors
+  - stm
+  - transformers
+  - wai-transformers
+  - websockets >= 0.11
+
+library:
+  source-dirs: src
+  # exposed-modules:
+  #   - 
+  #   - Hpack.Config
+  #   - Hpack.Render
+  #   - Hpack.Yaml
+
+tests:
+  spec:
+    # cpp-options: -DTEST
+    main: Spec.hs
+    source-dirs:
+      - test
+      - src
+    dependencies:
+      - websockets-simple
+      - stm
+      - tasty
+      - tasty-hspec
+      - hspec

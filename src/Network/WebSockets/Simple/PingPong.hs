@@ -11,10 +11,10 @@ import Data.Aeson (ToJSON (..), FromJSON (..))
 import Data.Aeson.Types (Value (Array))
 import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Concurrent.Async.Every (every, reset)
-import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TVar (newTVarIO, readTVar, writeTVar)
+import Control.Concurrent.STM (atomically, newTVarIO, readTVar, writeTVar)
 
 
+-- | Uses the JSON literal @[]@ as the ping message
 newtype PingPong a = PingPong {getPingPong :: Maybe a}
 
 -- | Assumes @a@ isn't an 'Data.Aeson.Types.Array' of anything
@@ -24,7 +24,9 @@ instance ToJSON a => ToJSON (PingPong a) where
 
 -- | Assumes @a@ isn't an 'Data.Aeson.Types.Array' of anything
 instance FromJSON a => FromJSON (PingPong a) where
-  parseJSON (Array _) = pure (PingPong Nothing)
+  parseJSON x@(Array xs)
+    | null xs = pure (PingPong Nothing)
+    | otherwise = (PingPong . Just) <$> parseJSON x
   parseJSON x = (PingPong . Just) <$> parseJSON x
 
 
@@ -32,8 +34,8 @@ instance FromJSON a => FromJSON (PingPong a) where
 pingPong :: ( MonadBaseControl IO m
             )
          => Int -- ^ Delay in microseconds
-         -> WebSocketsApp send receive m
-         -> m (WebSocketsApp (PingPong send) (PingPong receive) m)
+         -> WebSocketsApp m receive send
+         -> m (WebSocketsApp m (PingPong receive) (PingPong send))
 pingPong delay WebSocketsApp{onOpen,onReceive,onClose} = do
   counterVar <- liftBaseWith $ \_ -> newTVarIO Nothing
 

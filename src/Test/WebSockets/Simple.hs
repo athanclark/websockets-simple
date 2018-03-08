@@ -7,15 +7,13 @@
 
 module Test.WebSockets.Simple where
 
-
-import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..))
+import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..), ConnectionException (..))
 import Control.Monad (forever, void)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Trans.Control (MonadBaseControl (..))
-import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (Async, async)
 import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TChan (TChan, newTChan, writeTChan, readTChan, isEmptyTChan)
+import Control.Concurrent.STM.TChan (TChan, newTChan, writeTChan, readTChan)
 
 
 
@@ -24,8 +22,8 @@ runConnected :: forall send receive m
               . ( MonadIO m
                 , MonadBaseControl IO m
                 )
-             => WebSocketsApp send receive m
-             -> WebSocketsApp receive send m
+             => WebSocketsApp m receive send
+             -> WebSocketsApp m send receive
              -> m (Async (), Async (), TChan send, TChan receive)
 runConnected sendsSreceivesR sendsRreceivesS = do
   (sendChan, receiveChan) <- liftIO $ atomically $ (,) <$> newTChan <*> newTChan
@@ -38,11 +36,10 @@ runConnected sendsSreceivesR sendsRreceivesS = do
 
       close :: m ()
       close = do
-        onClose sendsRreceivesS Nothing
-        onClose sendsSreceivesR Nothing
+        onClose sendsRreceivesS ConnectionClosed
+        onClose sendsSreceivesR ConnectionClosed
 
   sToR <- liftBaseWith $ \runInBase -> async $ forever $ do
-    _ <- atomically $ isEmptyTChan sendChan
     s <- atomically $ readTChan sendChan
     void $ runInBase $ onReceive sendsRreceivesS WebSocketsAppParams
       { send = sendToReceive
@@ -50,7 +47,6 @@ runConnected sendsSreceivesR sendsRreceivesS = do
       } s
 
   rToS <- liftBaseWith $ \runInBase -> async $ forever $ do
-    _ <- atomically $ isEmptyTChan receiveChan
     r <- atomically $ readTChan receiveChan
     void $ runInBase $ onReceive sendsSreceivesR WebSocketsAppParams
       { send = sendToSend

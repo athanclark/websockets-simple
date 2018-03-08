@@ -14,7 +14,7 @@ import Test.Hspec (runIO, it)
 import Test.WebSockets.Simple (runConnected)
 
 
-testReceivingApp :: TChan Int -> WebSocketsApp Int Int IO
+testReceivingApp :: TChan Int -> WebSocketsApp IO Int Int
 testReceivingApp receivedChan = WebSocketsApp
   { onOpen = \WebSocketsAppParams{send} -> do
       putStrLn "sending in 10 seconds..."
@@ -26,7 +26,7 @@ testReceivingApp receivedChan = WebSocketsApp
   , onClose = \_ -> pure ()
   }
 
-testSendingApp :: WebSocketsApp Int Int IO
+testSendingApp :: WebSocketsApp IO Int Int
 testSendingApp = WebSocketsApp
   { onOpen = \_ -> pure ()
   , onReceive = \WebSocketsAppParams{send} x -> do

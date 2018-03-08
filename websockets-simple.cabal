@@ -1,50 +1,81 @@
-name:                websockets-simple
-version:             0.0.6.3
-synopsis:            Simpler interface to the websockets api
--- description:
-homepage:            https://github.com/athanclark/websockets-simple#readme
-license:             BSD3
-license-file:        LICENSE
-author:              Athan Clark
-maintainer:          athan.clark@gmail.com
-copyright:           2017 Athan Clark
-category:            Web
-build-type:          Simple
-extra-source-files:  README.md
-cabal-version:       >=1.10
+-- This file has been generated from package.yaml by hpack version 0.21.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 75f9f965708b5aa6abe27872a6462cb2eddb6048045020a435cdff9eb7d1baff
 
-library
-  hs-source-dirs:      src
-  exposed-modules:     Network.WebSockets.Simple
-                       Network.WebSockets.Simple.PingPong
-                       Test.WebSockets.Simple
-  build-depends:       base >= 4.8 && < 5
-                     , aeson
-                     , async
-                     , bytestring
-                     , every >= 0.0.1
-                     , exceptions
-                     , monad-control
-                     , stm
-                     , transformers
-                     , wai-transformers
-                     , websockets >= 0.11
-  default-language:    Haskell2010
+name:           websockets-simple
+version:        0.0.7
+synopsis:       Composable websockets clients
+description:    See README at <https://github.com/athanclark/websockets-simple#readme>
+category:       Web
+homepage:       https://github.com/athanclark/websockets-simple#readme
+bug-reports:    https://github.com/athanclark/websockets-simple/issues
+maintainer:     Athan Clark <athan.clark@gmail.com>
+license:        BSD-3-Clause
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
 
-
-test-suite test
-  type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
-  main-is:             Spec.hs
-  build-depends:       base
-                     , websockets-simple
-                     , stm
-                     , tasty
-                     , tasty-hspec
-                     , hspec
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
-  default-language:    Haskell2010
+extra-source-files:
+    README.md
 
 source-repository head
-  type:     git
+  type: git
   location: https://github.com/athanclark/websockets-simple
+
+library
+  exposed-modules:
+      Network.WebSockets.Simple
+      Network.WebSockets.Simple.PingPong
+      Test.WebSockets.Simple
+  other-modules:
+      Paths_websockets_simple
+  hs-source-dirs:
+      src
+  ghc-options: -Wall
+  build-depends:
+      aeson
+    , async
+    , base >=4.9 && <5
+    , bytestring
+    , every >=0.0.1
+    , exceptions
+    , monad-control
+    , profunctors
+    , stm
+    , transformers
+    , wai-transformers
+    , websockets >=0.11
+  default-language: Haskell2010
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Network.WebSockets.Simple
+      Network.WebSockets.Simple.PingPong
+      Test.WebSockets.Simple
+      Paths_websockets_simple
+  hs-source-dirs:
+      test
+      src
+  ghc-options: -Wall
+  build-depends:
+      aeson
+    , async
+    , base >=4.9 && <5
+    , bytestring
+    , every >=0.0.1
+    , exceptions
+    , hspec
+    , monad-control
+    , profunctors
+    , stm
+    , tasty
+    , tasty-hspec
+    , transformers
+    , wai-transformers
+    , websockets >=0.11
+    , websockets-simple
+  default-language: Haskell2010
