@@ -13,7 +13,8 @@ module Network.WebSockets.Simple
     WebSocketsApp (..), WebSocketsAppParams (..), WebSocketsAppThreads (..)
   , Network.WebSockets.ConnectionException (..), WebSocketsSimpleError (..)
   , -- * Running
-    toClientAppT, toClientAppT', toServerAppT
+    toClientAppT --, toClientAppT'
+  , toServerAppT
   , -- * Utilities
     expBackoffStrategy
   , hoistWebSocketsApp
@@ -98,7 +99,7 @@ toClientAppT :: forall send receive m
                 , MonadCatch m
                 )
              => WebSocketsApp m receive send
-             -> ClientAppT m WebSocketsAppThreads
+             -> ClientAppT m () -- WebSocketsAppThreads
 toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
   let send :: send -> m ()
       send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` (\e -> liftIO (putStrLn "Closing from send:") >> onClose e)
@@ -111,7 +112,7 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
 
   onOpen params
 
-  receivingThread <- liftBaseWith $ \runInBase -> async $
+  liftBaseWith $ \runInBase ->
     let go' = forever $ do
           data' <- receiveDataMessage conn
           let data'' = case data' of
@@ -122,22 +123,22 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
             Just received -> runInBase (onReceive params received)
     in  go' `catch` (\e -> () <$ (putStrLn "Closing from receiveDataMessage:" *> runInBase (onClose e)))
 
-  liftIO (link receivingThread)
+  -- liftIO (link receivingThread)
 
-  pure $ WebSocketsAppThreads
-    { wsAppReceivingThread = receivingThread
-    }
+  -- pure $ WebSocketsAppThreads
+  --   { wsAppReceivingThread = receivingThread
+  --   }
 
 
 
-toClientAppT' :: ( ToJSON send
-                 , FromJSON receive
-                 , MonadIO m
-                 , MonadBaseControl IO m
-                 , MonadThrow m
-                 , MonadCatch m
-                 ) => WebSocketsApp m receive send -> ClientAppT m ()
-toClientAppT' wsApp conn = void (toClientAppT wsApp conn)
+-- toClientAppT' :: ( ToJSON send
+--                  , FromJSON receive
+--                  , MonadIO m
+--                  , MonadBaseControl IO m
+--                  , MonadThrow m
+--                  , MonadCatch m
+--                  ) => WebSocketsApp m receive send -> ClientAppT m ()
+-- toClientAppT' wsApp conn = void (toClientAppT wsApp conn)
 
 
 toServerAppT :: ( ToJSON send
@@ -148,7 +149,7 @@ toServerAppT :: ( ToJSON send
                 , MonadCatch m
                 ) => WebSocketsApp m receive send -> ServerAppT m
 toServerAppT wsApp pending =
-  liftIO (acceptRequest pending) >>= toClientAppT' wsApp
+  liftIO (acceptRequest pending) >>= toClientAppT wsApp
 
 
 

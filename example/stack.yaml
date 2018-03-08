@@ -37,7 +37,7 @@ packages:
 - .
 - location:
     git: https://github.com/athanclark/websockets-simple.git
-    commit: 026584d58be99432466b954a16f3a44f2db97438
+    commit: b373782f375b9894180bd1cf4f4cea4183302be8
   extra-dep: true
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.

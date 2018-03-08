@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0fd7a69684c73e2d69f006be6b9f3028e804149928f115366bc6ef246ebe1cf5
+-- hash: 8c5fb10c56b1311af543482351f5fe89436d699933b3f8a241d26c3d22ffaa2a
 
 name:           websockets-simple
 version:        0.0.7
@@ -46,7 +46,7 @@ library
     , stm
     , transformers
     , wai-transformers
-    , websockets >=0.11
+    , websockets >=0.12.3
   default-language: Haskell2010
 
 test-suite spec
@@ -76,6 +76,6 @@ test-suite spec
     , tasty-hspec
     , transformers
     , wai-transformers
-    , websockets >=0.11
+    , websockets >=0.12.3
     , websockets-simple
   default-language: Haskell2010

@@ -23,7 +23,7 @@ dependencies:
   - stm
   - transformers
   - wai-transformers
-  - websockets >= 0.11
+  - websockets >= 0.12.3
 
 library:
   source-dirs: src

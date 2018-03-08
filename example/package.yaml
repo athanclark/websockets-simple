@@ -36,10 +36,11 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - example
-    - websockets
+    - websockets >= 0.12.3.1
     - websockets-simple >= 0.0.7
     - stm
     - async
+    - text
     - wai-transformers
     - warp
     - wai-middleware-content-type

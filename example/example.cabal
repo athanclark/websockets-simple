@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 549542c26d6a687ce192652a47f2d9df8d0fc30aa10dc9f0fe055a55f639cf8c
+-- hash: be1edc06e2825734c66940841807a766b3a241d762362202a597114b2fccb027
 
 name:           example
 version:        0.1.0.0
@@ -68,10 +68,11 @@ executable example-server
     , example
     , http-types
     , stm
+    , text
     , wai-middleware-content-type
     , wai-transformers
     , warp
-    , websockets
+    , websockets >=0.12.3.1
     , websockets-simple >=0.0.7
   default-language: Haskell2010
 

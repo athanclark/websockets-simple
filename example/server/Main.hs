@@ -9,11 +9,13 @@ import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..), 
 import Lib (Input (..), Output (..))
 
 import Network.WebSockets (defaultConnectionOptions)
+import Network.WebSockets (acceptRequest, sendTextData, receiveDataMessage)
 import Network.HTTP.Types (status404)
 import Network.Wai.Middleware.ContentType.Text (textOnly)
 import Network.Wai.Trans (Application, websocketsOrT)
 import Network.Wai.Handler.Warp (run)
-import Control.Monad (forever)
+import Data.Text (Text)
+import Control.Monad (forever, void)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, cancel)
 import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar, modifyTVar')
@@ -22,7 +24,15 @@ import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar, mod
 main :: IO ()
 main = do
   s <- server
-  run 3000 (websocketsOrT id defaultConnectionOptions (toServerAppT s) defApp)
+  let s' = -- toServerAppT s
+           \pending -> do
+             conn <- acceptRequest pending
+             putStrLn "Accepted..."
+             sendTextData conn ("Uh..." :: Text)
+             forever $ do
+               x <- receiveDataMessage conn
+               putStrLn $ "Got: " ++ show x
+  run 3000 (websocketsOrT id defaultConnectionOptions s' defApp)
   where
     defApp :: Application
     defApp _ resp = resp (textOnly "404" status404 [])
