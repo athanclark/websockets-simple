@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 75f9f965708b5aa6abe27872a6462cb2eddb6048045020a435cdff9eb7d1baff
+-- hash: 0fd7a69684c73e2d69f006be6b9f3028e804149928f115366bc6ef246ebe1cf5
 
 name:           websockets-simple
 version:        0.0.7
@@ -12,7 +12,7 @@ category:       Web
 homepage:       https://github.com/athanclark/websockets-simple#readme
 bug-reports:    https://github.com/athanclark/websockets-simple/issues
 maintainer:     Athan Clark <athan.clark@gmail.com>
-license:        BSD-3-Clause
+license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10

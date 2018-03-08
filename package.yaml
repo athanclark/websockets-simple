@@ -3,7 +3,7 @@ version: 0.0.7
 synopsis: Composable websockets clients
 description: See README at <https://github.com/athanclark/websockets-simple#readme>
 maintainer: Athan Clark <athan.clark@gmail.com>
-license: BSD-3-Clause
+license: BSD3
 github: athanclark/websockets-simple
 category: Web
 extra-source-files:
