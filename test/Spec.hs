@@ -23,7 +23,7 @@ testReceivingApp receivedChan = WebSocketsApp
       putStrLn "sent."
   , onReceive = \_ x ->
       atomically $ writeTChan receivedChan x
-  , onClose = \_ -> pure ()
+  , onClose = \_ _ -> pure ()
   }
 
 testSendingApp :: WebSocketsApp IO Int Int
@@ -34,7 +34,7 @@ testSendingApp = WebSocketsApp
       threadDelay $ 10^6 * 10
       send x
       putStrLn "sent."
-  , onClose = \_ -> pure ()
+  , onClose = \_ _ -> pure ()
   }
 
 

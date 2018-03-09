@@ -10,10 +10,10 @@
 
 module Network.WebSockets.Simple
   ( -- * Types
-    WebSocketsApp (..), WebSocketsAppParams (..), WebSocketsAppThreads (..)
-  , Network.WebSockets.ConnectionException (..), WebSocketsSimpleError (..)
+    WebSocketsApp (..), WebSocketsAppParams (..)
+  , Network.WebSockets.ConnectionException (..), CloseOrigin (..), WebSocketsSimpleError (..)
   , -- * Running
-    toClientAppT --, toClientAppT'
+    toClientAppT
   , toServerAppT
   , -- * Utilities
     expBackoffStrategy
@@ -27,12 +27,11 @@ import Data.Aeson (ToJSON (..), FromJSON (..))
 import qualified Data.Aeson as Aeson
 import Data.ByteString.Lazy (ByteString)
 
-import Control.Monad (void, forever)
+import Control.Monad (forever)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Catch (Exception, throwM, MonadThrow, catch, MonadCatch)
 import Control.Monad.Trans.Control (MonadBaseControl (..))
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (Async, async, link)
 import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar)
 
 import GHC.Generics (Generic)
@@ -49,15 +48,21 @@ data WebSocketsAppParams m send = WebSocketsAppParams
 data WebSocketsApp m receive send = WebSocketsApp
   { onOpen    :: WebSocketsAppParams m send -> m ()
   , onReceive :: WebSocketsAppParams m send -> receive -> m ()
-  , onClose   :: ConnectionException -> m () -- ^ Should be re-entrant; this exception is caught in all uses of 'send', even if used in a dead 'Network.WebSockets.Connection' in a lingering thread.
+  , onClose   :: CloseOrigin -> ConnectionException -> m () -- ^ Should be re-entrant; this exception is caught in all uses of 'send', even if used in a dead 'Network.WebSockets.Connection' in a lingering thread.
   } deriving (Generic, Typeable)
+
+data CloseOrigin
+  = ClosedOnSend
+  | ClosedOnClose
+  | ClosedOnReceive
+
 
 instance Profunctor (WebSocketsApp m) where
   dimap :: forall a b c d. (a -> b) -> (c -> d) -> WebSocketsApp m b c -> WebSocketsApp m a d
   dimap receiveF sendF WebSocketsApp{onOpen,onReceive,onClose} = WebSocketsApp
     { onOpen = \params -> onOpen (getParams params)
     , onReceive = \params r -> onReceive (getParams params) (receiveF r)
-    , onClose = onClose
+    , onClose = \o e -> onClose o e
     }
     where
       getParams :: WebSocketsAppParams m d -> WebSocketsAppParams m c
@@ -69,9 +74,9 @@ hoistWebSocketsApp :: (forall a. m a -> n a)
                    -> WebSocketsApp m receive send
                    -> WebSocketsApp n receive send
 hoistWebSocketsApp f coF WebSocketsApp{onOpen,onReceive,onClose} = WebSocketsApp
-  { onOpen = \WebSocketsAppParams{send,close} -> f $ onOpen WebSocketsAppParams{send = coF . send, close = coF close}
-  , onReceive = \WebSocketsAppParams{send,close} r -> f $ onReceive WebSocketsAppParams{send = coF . send, close = coF close} r
-  , onClose = f . onClose
+  { onOpen = \WebSocketsAppParams{send,close} -> f (onOpen WebSocketsAppParams{send = coF . send, close = coF close})
+  , onReceive = \WebSocketsAppParams{send,close} r -> f (onReceive WebSocketsAppParams{send = coF . send, close = coF close} r)
+  , onClose = \o e -> f (onClose o e)
   }
 
 
@@ -80,12 +85,12 @@ instance Applicative m => Monoid (WebSocketsApp m receive send) where
   mempty = WebSocketsApp
     { onOpen = \_ -> pure ()
     , onReceive = \_ _ -> pure ()
-    , onClose = \_ -> pure ()
+    , onClose = \_ _ -> pure ()
     }
   mappend x y = WebSocketsApp
     { onOpen = \params -> onOpen x params *> onOpen y params
     , onReceive = \params r -> onReceive x params r *> onReceive y params r
-    , onClose = \mE -> onClose x mE *> onClose y mE
+    , onClose = \o mE -> onClose x o mE *> onClose y o mE
     }
 
 
@@ -102,10 +107,10 @@ toClientAppT :: forall send receive m
              -> ClientAppT m () -- WebSocketsAppThreads
 toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
   let send :: send -> m ()
-      send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` (\e -> liftIO (putStrLn "Closing from send:") >> onClose e)
+      send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` (onClose ClosedOnSend)
 
       close :: m ()
-      close = liftIO (sendClose conn (Aeson.encode "requesting close")) `catch` (\e -> liftIO (putStrLn "Closing from close:") >> onClose e)
+      close = liftIO (sendClose conn (Aeson.encode "requesting close")) `catch` (onClose ClosedOnClose)
 
       params :: WebSocketsAppParams m send
       params = WebSocketsAppParams{send,close}
@@ -121,24 +126,8 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
           case Aeson.decode data'' of
             Nothing -> throwM (JSONParseError data'')
             Just received -> runInBase (onReceive params received)
-    in  go' `catch` (\e -> () <$ (putStrLn "Closing from receiveDataMessage:" *> runInBase (onClose e)))
+    in  go' `catch` (\e -> () <$ (runInBase (onClose ClosedOnReceive e)))
 
-  -- liftIO (link receivingThread)
-
-  -- pure $ WebSocketsAppThreads
-  --   { wsAppReceivingThread = receivingThread
-  --   }
-
-
-
--- toClientAppT' :: ( ToJSON send
---                  , FromJSON receive
---                  , MonadIO m
---                  , MonadBaseControl IO m
---                  , MonadThrow m
---                  , MonadCatch m
---                  ) => WebSocketsApp m receive send -> ClientAppT m ()
--- toClientAppT' wsApp conn = void (toClientAppT wsApp conn)
 
 
 toServerAppT :: ( ToJSON send
@@ -183,7 +172,3 @@ data WebSocketsSimpleError
 
 instance Exception WebSocketsSimpleError
 
-
-newtype WebSocketsAppThreads = WebSocketsAppThreads
-  { wsAppReceivingThread :: Async ()
-  }

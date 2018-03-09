@@ -7,7 +7,7 @@
 
 module Test.WebSockets.Simple where
 
-import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..), ConnectionException (..))
+import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..), ConnectionException (..), CloseOrigin (..))
 import Control.Monad (forever, void)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Trans.Control (MonadBaseControl (..))
@@ -36,8 +36,8 @@ runConnected sendsSreceivesR sendsRreceivesS = do
 
       close :: m ()
       close = do
-        onClose sendsRreceivesS ConnectionClosed
-        onClose sendsSreceivesR ConnectionClosed
+        onClose sendsRreceivesS ClosedOnClose ConnectionClosed
+        onClose sendsSreceivesR ClosedOnClose ConnectionClosed
 
   sToR <- liftBaseWith $ \runInBase -> async $ forever $ do
     s <- atomically $ readTChan sendChan
