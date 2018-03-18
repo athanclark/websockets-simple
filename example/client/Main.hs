@@ -39,7 +39,6 @@ client invokeChan = do
           send Increment
           putStrLn $ "Sent: " ++ show Increment
           threadDelay (10^6)
-    , onClose = \e -> do
-        putStrLn $ "Closing: " ++ show e
-        onClose e
+    , onClose = \o e -> do
+        putStrLn $ "Closing: " ++ show e ++ ", " ++ show o
     }

@@ -18,7 +18,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-10.8
+resolver: lts-11.0
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -35,16 +35,13 @@ resolver: lts-10.8
 #  - wai
 packages:
 - .
-- location:
-    git: https://github.com/athanclark/websockets-simple.git
-    commit: e1d64d631860e886166063ae5ed2b4e14f8ae1f0
-  extra-dep: true
+- ../
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps:
-  - wai-middleware-content-type-0.5.2
-  - nested-routes-8.0.1
+  - wai-middleware-content-type-0.6.0
+  - nested-routes-9.0.0
   # - websockets-simple-0.0.7
 
 # Override default flag values for local packages and extra-deps

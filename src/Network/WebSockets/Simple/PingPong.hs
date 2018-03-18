@@ -1,6 +1,7 @@
 {-# LANGUAGE
     NamedFieldPuns
   , FlexibleContexts
+  , OverloadedStrings
   #-}
 
 module Network.WebSockets.Simple.PingPong where
@@ -8,10 +9,13 @@ module Network.WebSockets.Simple.PingPong where
 import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..))
 
 import Data.Aeson (ToJSON (..), FromJSON (..))
-import Data.Aeson.Types (Value (Array))
+import Data.Aeson.Types (Value (Array, String), typeMismatch)
+import qualified Data.Vector as V
+import Control.Monad (forever)
 import Control.Monad.Trans.Control (MonadBaseControl (..))
-import Control.Concurrent.Async.Every (every, reset)
-import Control.Concurrent.STM (atomically, newTVarIO, readTVar, writeTVar)
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (async, cancel)
+import Control.Concurrent.STM (atomically, newEmptyTMVarIO, putTMVar, takeTMVar)
 
 
 -- | Uses the JSON literal @[]@ as the ping message
@@ -19,15 +23,18 @@ newtype PingPong a = PingPong {getPingPong :: Maybe a}
 
 -- | Assumes @a@ isn't an 'Data.Aeson.Types.Array' of anything
 instance ToJSON a => ToJSON (PingPong a) where
-  toJSON (PingPong Nothing) = toJSON ([] :: [()])
-  toJSON (PingPong (Just x)) = toJSON x
+  toJSON (PingPong Nothing) = String ""
+  toJSON (PingPong (Just x)) = toJSON [x]
 
 -- | Assumes @a@ isn't an 'Data.Aeson.Types.Array' of anything
 instance FromJSON a => FromJSON (PingPong a) where
+  parseJSON x@(String xs)
+    | xs == "" = pure (PingPong Nothing)
+    | otherwise = typeMismatch "PingPong" x
   parseJSON x@(Array xs)
-    | null xs = pure (PingPong Nothing)
-    | otherwise = (PingPong . Just) <$> parseJSON x
-  parseJSON x = (PingPong . Just) <$> parseJSON x
+    | V.length xs /= 1 = typeMismatch "PingPong" x
+    | otherwise = (PingPong . Just) <$> parseJSON (xs V.! 0)
+  parseJSON x = typeMismatch "PingPong" x
 
 
 
@@ -37,24 +44,25 @@ pingPong :: ( MonadBaseControl IO m
          -> WebSocketsApp m receive send
          -> m (WebSocketsApp m (PingPong receive) (PingPong send))
 pingPong delay WebSocketsApp{onOpen,onReceive,onClose} = do
-  counterVar <- liftBaseWith $ \_ -> newTVarIO Nothing
-
-  let halfDelay = delay `div` 2
+  pingingThread <- liftBaseWith $ \_ -> newEmptyTMVarIO
 
   pure WebSocketsApp
-    { onOpen = \WebSocketsAppParams{send,close} -> do
+    { onOpen = \params@WebSocketsAppParams{send} -> do
         liftBaseWith $ \runInBase -> do
-          counter <- every delay (Just halfDelay) $ runInBase $
-            send (PingPong Nothing)
-          atomically $ writeTVar counterVar (Just counter)
-        onOpen WebSocketsAppParams{send = send . PingPong . Just, close}
-    , onReceive = \WebSocketsAppParams{send,close} (PingPong mPingPong) ->
+          counter <- async $ forever $ do
+            threadDelay delay
+            runInBase $ send $ PingPong Nothing
+          atomically $ putTMVar pingingThread counter
+        onOpen (mkParams params)
+    , onReceive = \params (PingPong mPingPong) ->
         case mPingPong of
-          Nothing -> liftBaseWith $ \_ -> do
-            mCounter <- atomically $ readTVar counterVar
-            case mCounter of
-              Nothing -> error "somehow received message before socket was opened"
-              Just counter -> reset (Just halfDelay) counter
-          Just r -> onReceive WebSocketsAppParams{send = send . PingPong . Just, close} r
-    , onClose
+          Nothing -> pure ()
+          Just r -> onReceive (mkParams params) r
+    , onClose = \o e -> do
+        liftBaseWith $ \_ -> do
+          thread <- atomically (takeTMVar pingingThread)
+          cancel thread
+        onClose o e
     }
+  where
+    mkParams WebSocketsAppParams{send,close} = WebSocketsAppParams{send = send . PingPong . Just,close}

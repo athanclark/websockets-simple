@@ -1,5 +1,5 @@
 name: websockets-simple
-version: 0.1.0
+version: 0.1.1
 synopsis: Composable websockets clients
 description: See README at <https://github.com/athanclark/websockets-simple#readme>
 maintainer: Athan Clark <athan.clark@gmail.com>
@@ -16,12 +16,12 @@ dependencies:
   - aeson
   - async
   - bytestring
-  - every >= 0.0.1
   - exceptions
   - monad-control
   - profunctors
   - stm
   - transformers
+  - vector
   - wai-transformers
   - websockets >= 0.12.3
 

@@ -55,6 +55,7 @@ data CloseOrigin
   = ClosedOnSend
   | ClosedOnClose
   | ClosedOnReceive
+  deriving (Eq, Show)
 
 
 instance Profunctor (WebSocketsApp m) where

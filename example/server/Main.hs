@@ -72,8 +72,8 @@ server = do
             putStrLn $ "Sending Response: " ++ show (Value count)
             send (Value count)
             putStrLn $ "Sent Response: " ++ show (Value count)
-    , onClose = \e -> do
-        putStrLn $ "Closing... " ++ show e
+    , onClose = \o e -> do
+        putStrLn $ "Closing... " ++ show e ++ ", " ++ show o
         killEmitter
         atomically $ writeTVar countRef 0
     }
