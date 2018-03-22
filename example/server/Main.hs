@@ -8,11 +8,11 @@ module Main where
 import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..), toServerAppT)
 import Lib (Input (..), Output (..))
 
-import Network.WebSockets (defaultConnectionOptions)
-import Network.WebSockets (acceptRequest, sendTextData, receiveDataMessage)
+import Network.WebSockets (defaultConnectionOptions, acceptRequest, sendTextData, receiveDataMessage)
+import Network.WebSockets.Trans (websocketsOrT)
 import Network.HTTP.Types (status404)
 import Network.Wai.Middleware.ContentType.Text (textOnly)
-import Network.Wai.Trans (Application, websocketsOrT)
+import Network.Wai (Application)
 import Network.Wai.Handler.Warp (run)
 import Data.Text (Text)
 import Control.Monad (forever, void)
@@ -32,7 +32,7 @@ main = do
            --   forever $ do
            --     x <- receiveDataMessage conn
            --     putStrLn $ "Got: " ++ show x
-  run 3000 (websocketsOrT id defaultConnectionOptions s' defApp)
+  run 3000 (websocketsOrT defaultConnectionOptions s' defApp)
   where
     defApp :: Application
     defApp _ resp = resp (textOnly "404" status404 [])

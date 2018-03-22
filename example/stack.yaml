@@ -40,8 +40,13 @@ packages:
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
 extra-deps:
-  - wai-middleware-content-type-0.6.0
-  - nested-routes-9.0.0
+  - wai-middleware-content-type-0.6.1.1
+  - wai-middleware-verbs-0.4.0.1
+  - nested-routes-9.0.0.1
+  - wai-transformers-0.1.0
+  - websockets-0.12.4.0
+  - tries-0.0.5
+  - pred-trie-0.6.0.1
   # - websockets-simple-0.0.7
 
 # Override default flag values for local packages and extra-deps
