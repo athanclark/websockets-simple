@@ -2,10 +2,10 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bf5ddb451632a405334939c43f387b4312612ae76051e88ebd8cba2f80ac63dc
+-- hash: a26994ed2679bb5a516cc782fa3f06b12b65f628ecbbbdb3c6ba27030427fdc1
 
 name:           websockets-simple
-version:        0.1.2
+version:        0.1.2.1
 synopsis:       Composable websockets clients
 description:    See README at <https://github.com/athanclark/websockets-simple#readme>
 category:       Web

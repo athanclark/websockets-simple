@@ -1,5 +1,5 @@
 name: websockets-simple
-version: 0.1.2
+version: 0.1.2.1
 synopsis: Composable websockets clients
 description: See README at <https://github.com/athanclark/websockets-simple#readme>
 maintainer: Athan Clark <athan.clark@gmail.com>
