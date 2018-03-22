@@ -129,7 +129,6 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
           let data'' = case data' of
                         Text xs _ -> xs
                         Binary xs -> xs
-          putStrLn $ show data''
           case Aeson.decode data'' of
             Nothing -> throwM (JSONParseError data'')
             Just received -> runM (onReceive params received)
