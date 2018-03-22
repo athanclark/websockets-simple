@@ -2,10 +2,10 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b864ea883942ac76ccc4d385c87d3c8613080be5d10c29723565111d84ef549b
+-- hash: 17465d6fe4ef09a21762abb7a83f0e0fa75c35dfe38ff5f08672628f4b03b216
 
 name:           websockets-simple
-version:        0.1.1
+version:        0.1.2
 synopsis:       Composable websockets clients
 description:    See README at <https://github.com/athanclark/websockets-simple#readme>
 category:       Web
@@ -40,12 +40,13 @@ library
     , base >=4.9 && <5
     , bytestring
     , exceptions
-    , monad-control
+    , extractable-singleton >=0.0.1
+    , monad-control-aligned >=0.0.1
     , profunctors
     , stm
     , transformers
     , vector
-    , wai-transformers
+    , wai-transformers >=0.1.0
     , websockets >=0.12.3
   default-language: Haskell2010
 
@@ -67,15 +68,16 @@ test-suite spec
     , base >=4.9 && <5
     , bytestring
     , exceptions
+    , extractable-singleton >=0.0.1
     , hspec
-    , monad-control
+    , monad-control-aligned >=0.0.1
     , profunctors
     , stm
     , tasty
     , tasty-hspec
     , transformers
     , vector
-    , wai-transformers
+    , wai-transformers >=0.1.0
     , websockets >=0.12.3
     , websockets-simple
   default-language: Haskell2010

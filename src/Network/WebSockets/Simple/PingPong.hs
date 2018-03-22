@@ -11,8 +11,9 @@ import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..))
 import Data.Aeson (ToJSON (..), FromJSON (..))
 import Data.Aeson.Types (Value (Array, String), typeMismatch)
 import qualified Data.Vector as V
+import Data.Singleton.Class (Extractable (..))
 import Control.Monad (forever)
-import Control.Monad.Trans.Control (MonadBaseControl (..))
+import Control.Monad.Trans.Control.Aligned (MonadBaseControl (..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, cancel)
 import Control.Concurrent.STM (atomically, newEmptyTMVarIO, putTMVar, takeTMVar)
@@ -38,13 +39,14 @@ instance FromJSON a => FromJSON (PingPong a) where
 
 
 
-pingPong :: ( MonadBaseControl IO m
+pingPong :: ( MonadBaseControl IO m stM
+            , Extractable stM
             )
          => Int -- ^ Delay in microseconds
          -> WebSocketsApp m receive send
          -> m (WebSocketsApp m (PingPong receive) (PingPong send))
-pingPong delay WebSocketsApp{onOpen,onReceive,onClose} = do
-  pingingThread <- liftBaseWith $ \_ -> newEmptyTMVarIO
+pingPong delay WebSocketsApp{onOpen,onReceive,onClose} = liftBaseWith $ \_ -> do
+  pingingThread <- newEmptyTMVarIO
 
   pure WebSocketsApp
     { onOpen = \params@WebSocketsAppParams{send} -> do

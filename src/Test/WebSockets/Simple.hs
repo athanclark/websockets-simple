@@ -8,9 +8,10 @@
 module Test.WebSockets.Simple where
 
 import Network.WebSockets.Simple (WebSocketsApp (..), WebSocketsAppParams (..), ConnectionException (..), CloseOrigin (..))
-import Control.Monad (forever, void)
+import Data.Singleton.Class (Extractable (..))
+import Control.Monad (forever)
 import Control.Monad.IO.Class (MonadIO (..))
-import Control.Monad.Trans.Control (MonadBaseControl (..))
+import Control.Monad.Trans.Control.Aligned (MonadBaseControl (..))
 import Control.Concurrent.Async (Async, async)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TChan (TChan, newTChan, writeTChan, readTChan)
@@ -18,9 +19,10 @@ import Control.Concurrent.STM.TChan (TChan, newTChan, writeTChan, readTChan)
 
 
 -- | Runs two 'WebSocketsApp's together in a forged channel.
-runConnected :: forall send receive m
+runConnected :: forall send receive m stM
               . ( MonadIO m
-                , MonadBaseControl IO m
+                , MonadBaseControl IO m stM
+                , Extractable stM
                 )
              => WebSocketsApp m receive send
              -> WebSocketsApp m send receive
@@ -41,14 +43,14 @@ runConnected sendsSreceivesR sendsRreceivesS = do
 
   sToR <- liftBaseWith $ \runInBase -> async $ forever $ do
     s <- atomically $ readTChan sendChan
-    void $ runInBase $ onReceive sendsRreceivesS WebSocketsAppParams
+    fmap runSingleton $ runInBase $ onReceive sendsRreceivesS WebSocketsAppParams
       { send = sendToReceive
       , close
       } s
 
   rToS <- liftBaseWith $ \runInBase -> async $ forever $ do
     r <- atomically $ readTChan receiveChan
-    void $ runInBase $ onReceive sendsSreceivesR WebSocketsAppParams
+    fmap runSingleton $ runInBase $ onReceive sendsSreceivesR WebSocketsAppParams
       { send = sendToSend
       , close
       } r

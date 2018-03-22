@@ -21,16 +21,17 @@ module Network.WebSockets.Simple
   ) where
 
 import Network.WebSockets (DataMessage (..), sendTextData, sendClose, receiveDataMessage, acceptRequest, ConnectionException (..))
-import Network.Wai.Trans (ServerAppT, ClientAppT)
+import Network.WebSockets.Trans (ServerAppT, ClientAppT)
 import Data.Profunctor (Profunctor (..))
 import Data.Aeson (ToJSON (..), FromJSON (..))
 import qualified Data.Aeson as Aeson
 import Data.ByteString.Lazy (ByteString)
+import Data.Singleton.Class (Extractable (..))
 
 import Control.Monad (forever)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Monad.Catch (Exception, throwM, MonadThrow, catch, MonadCatch)
-import Control.Monad.Trans.Control (MonadBaseControl (..))
+import Control.Monad.Trans.Control.Aligned (MonadBaseControl (..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar)
 
@@ -96,14 +97,14 @@ instance Applicative m => Monoid (WebSocketsApp m receive send) where
 
 
 -- | This can throw a 'WebSocketSimpleError' to the main thread via 'Control.Concurrent.Async.link' when json parsing fails.
-toClientAppT :: forall send receive m
-              . ( ToJSON send
-                , FromJSON receive
-                , MonadIO m
-                , MonadBaseControl IO m
-                , MonadThrow m
-                , MonadCatch m
-                )
+toClientAppT :: forall send receive m stM
+              . ToJSON send
+             => FromJSON receive
+             => MonadIO m
+             => MonadBaseControl IO m stM
+             => MonadThrow m
+             => MonadCatch m
+             => Extractable stM
              => WebSocketsApp m receive send
              -> ClientAppT m () -- WebSocketsAppThreads
 toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
@@ -119,24 +120,30 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
   onOpen params
 
   liftBaseWith $ \runInBase ->
-    let go' = forever $ do
+    let runM :: forall a. m a -> IO a
+        runM = fmap runSingleton . runInBase
+
+        go' :: IO ()
+        go' = forever $ do
           data' <- receiveDataMessage conn
           let data'' = case data' of
                         Text xs _ -> xs
                         Binary xs -> xs
+          putStrLn $ show data''
           case Aeson.decode data'' of
             Nothing -> throwM (JSONParseError data'')
-            Just received -> runInBase (onReceive params received)
-    in  go' `catch` (\e -> () <$ (runInBase (onClose ClosedOnReceive e)))
+            Just received -> runM (onReceive params received)
+    in  go' `catch` (runM . onClose ClosedOnReceive)
 
 
 
 toServerAppT :: ( ToJSON send
                 , FromJSON receive
                 , MonadIO m
-                , MonadBaseControl IO m
+                , MonadBaseControl IO m stM
                 , MonadThrow m
                 , MonadCatch m
+                , Extractable stM
                 ) => WebSocketsApp m receive send -> ServerAppT m
 toServerAppT wsApp pending =
   liftIO (acceptRequest pending) >>= toClientAppT wsApp
