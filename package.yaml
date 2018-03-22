@@ -24,7 +24,7 @@ dependencies:
   - transformers
   - vector
   - wai-transformers >= 0.1.0
-  - websockets >= 0.12.3
+  - websockets >= 0.12.4
 
 library:
   source-dirs: src
