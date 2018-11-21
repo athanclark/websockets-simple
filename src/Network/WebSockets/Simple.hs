@@ -82,17 +82,20 @@ hoistWebSocketsApp f coF WebSocketsApp{onOpen,onReceive,onClose} = WebSocketsApp
   }
 
 
+instance Applicative m => Semigroup (WebSocketsApp m receive send) where
+  x <> y = WebSocketsApp
+    { onOpen = \params -> onOpen x params *> onOpen y params
+    , onReceive = \params r -> onReceive x params r *> onReceive y params r
+    , onClose = \o mE -> onClose x o mE *> onClose y o mE
+    }
+
+
 
 instance Applicative m => Monoid (WebSocketsApp m receive send) where
   mempty = WebSocketsApp
     { onOpen = \_ -> pure ()
     , onReceive = \_ _ -> pure ()
     , onClose = \_ _ -> pure ()
-    }
-  mappend x y = WebSocketsApp
-    { onOpen = \params -> onOpen x params *> onOpen y params
-    , onReceive = \params r -> onReceive x params r *> onReceive y params r
-    , onClose = \o mE -> onClose x o mE *> onClose y o mE
     }
 
 
