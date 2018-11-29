@@ -19,23 +19,28 @@ import Control.Concurrent.Async (async, cancel)
 import Control.Concurrent.STM (atomically, newEmptyTMVarIO, putTMVar, takeTMVar)
 
 
+
 -- | Uses the JSON literal @[]@ as the ping message
 newtype PingPong a = PingPong {getPingPong :: Maybe a}
 
 -- | Assumes @a@ isn't an 'Data.Aeson.Types.Array' of anything
 instance ToJSON a => ToJSON (PingPong a) where
-  toJSON (PingPong Nothing) = String ""
-  toJSON (PingPong (Just x)) = toJSON [x]
+  toJSON (PingPong mx) = case mx of
+    Nothing -> String ""
+    Just x -> toJSON [x]
 
 -- | Assumes @a@ isn't an 'Data.Aeson.Types.Array' of anything
 instance FromJSON a => FromJSON (PingPong a) where
-  parseJSON x@(String xs)
-    | xs == "" = pure (PingPong Nothing)
-    | otherwise = typeMismatch "PingPong" x
-  parseJSON x@(Array xs)
-    | V.length xs /= 1 = typeMismatch "PingPong" x
-    | otherwise = (PingPong . Just) <$> parseJSON (xs V.! 0)
-  parseJSON x = typeMismatch "PingPong" x
+  parseJSON json = case json of
+    String xs
+      | xs == "" -> pure (PingPong Nothing)
+      | otherwise -> fail'
+    Array xs
+      | V.length xs /= 1 -> fail'
+      | otherwise -> (PingPong . Just) <$> parseJSON (xs V.! 0)
+    _ -> fail'
+    where
+      fail' = typeMismatch "PingPong" json
 
 
 
