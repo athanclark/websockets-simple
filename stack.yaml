@@ -40,8 +40,14 @@ packages:
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
-  - websockets-0.12.4.0
-  - wai-transformers-0.1.0
+  - attoparsec-ip-0.0.5
+  - attoparsec-uri-0.0.7
+  - chan-0.0.4
+  - emailaddress-0.2.0.0
+  - ip-1.4.1
+  - opaleye-0.6.7003.1
+  - purescript-iso-0.0.6
+  - zeromq4-simple-0.0.0
 
 # Override default flag values for local packages and extra-deps
 flags: {}

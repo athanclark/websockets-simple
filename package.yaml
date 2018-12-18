@@ -16,13 +16,14 @@ dependencies:
   - aeson
   - async
   - bytestring
+  - chan >= 0.0.4
   - exceptions
   - extractable-singleton >= 0.0.1
   - monad-control-aligned >= 0.0.1
   - profunctors
+  - purescript-iso >= 0.0.6
   - stm
   - transformers
-  - vector
   - wai-transformers >= 0.1.0
   - websockets >= 0.12.4
 
