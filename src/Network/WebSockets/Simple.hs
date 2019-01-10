@@ -112,10 +112,10 @@ toClientAppT :: forall send receive m stM
              -> ClientAppT m () -- WebSocketsAppThreads
 toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
   let send :: send -> m ()
-      send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` (onClose ClosedOnSend)
+      send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` onClose ClosedOnSend
 
       close :: m ()
-      close = liftIO (sendClose conn (Aeson.encode "requesting close")) `catch` (onClose ClosedOnClose)
+      close = liftIO (sendClose conn "requesting close") `catch` onClose ClosedOnClose
 
       params :: WebSocketsAppParams m send
       params = WebSocketsAppParams{send,close}
