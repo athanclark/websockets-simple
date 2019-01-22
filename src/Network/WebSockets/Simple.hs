@@ -6,6 +6,7 @@
   , NamedFieldPuns
   , FlexibleContexts
   , InstanceSigs
+  , OverloadedStrings
   #-}
 
 module Network.WebSockets.Simple
@@ -20,11 +21,15 @@ module Network.WebSockets.Simple
   , hoistWebSocketsApp
   ) where
 
-import Network.WebSockets (DataMessage (..), sendTextData, sendClose, receiveDataMessage, acceptRequest, ConnectionException (..))
+import Network.WebSockets
+  ( DataMessage (..), sendTextData, sendBinaryData
+  , sendClose, receiveDataMessage, acceptRequest, ConnectionException (..))
 import Network.WebSockets.Trans (ServerAppT, ClientAppT)
 import Data.Profunctor (Profunctor (..))
 import Data.Aeson (ToJSON (..), FromJSON (..))
 import qualified Data.Aeson as Aeson
+import Data.Text.Lazy (Text)
+import qualified Data.Text.Lazy.Encoding as LT
 import Data.ByteString.Lazy (ByteString)
 import Data.Singleton.Class (Extractable (..))
 
@@ -115,7 +120,7 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
       send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` (onClose ClosedOnSend)
 
       close :: m ()
-      close = liftIO (sendClose conn (Aeson.encode "requesting close")) `catch` (onClose ClosedOnClose)
+      close = liftIO (sendClose conn ("requesting close" :: ByteString)) `catch` (onClose ClosedOnClose)
 
       params :: WebSocketsAppParams m send
       params = WebSocketsAppParams{send,close}
@@ -136,6 +141,54 @@ toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
             Nothing -> throwM (JSONParseError data'')
             Just received -> runM (onReceive params received)
     in  go' `catch` (runM . onClose ClosedOnReceive)
+
+
+
+toClientAppTBoth :: forall m stM
+                  . MonadBaseControl IO m stM
+                 => Extractable stM
+                 => MonadCatch m
+                 => MonadIO m
+                 => WebSocketsApp m Text Text
+                 -> WebSocketsApp m ByteString ByteString
+                 -> ClientAppT m ()
+toClientAppTBoth textApp binApp conn = do
+  let sendText :: Text -> m ()
+      sendText x = liftIO (sendTextData conn x) `catch` (onClose textApp ClosedOnSend)
+      sendBin :: ByteString -> m ()
+      sendBin x = liftIO (sendBinaryData conn x) `catch` (onClose binApp ClosedOnSend)
+      catchBoth :: ConnectionException -> m ()
+      catchBoth e = do
+        onClose textApp ClosedOnReceive e
+        onClose binApp ClosedOnReceive e
+
+      close :: m ()
+      close = liftIO (sendClose conn ("requesting close" :: ByteString)) `catch` catchBoth
+
+      paramsText :: WebSocketsAppParams m Text
+      paramsText = WebSocketsAppParams{send=sendText,close}
+      paramsBin :: WebSocketsAppParams m ByteString
+      paramsBin = WebSocketsAppParams{send=sendBin,close}
+
+  onOpen textApp paramsText
+  onOpen binApp paramsBin
+
+  liftBaseWith $ \runInBase ->
+    let runM :: forall a. m a -> IO a
+        runM = fmap runSingleton . runInBase
+
+        go' :: IO ()
+        go' = forever $ do
+          data' <- receiveDataMessage conn
+          case data' of
+            Text xs mt ->
+              let t = case mt of
+                        Nothing -> LT.decodeUtf8 xs
+                        Just t' -> t'
+              in  runM (onReceive textApp paramsText t)
+            Binary xs ->
+              runM (onReceive binApp paramsBin xs)
+    in  go' `catch` (runM . catchBoth)
 
 
 

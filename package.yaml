@@ -23,6 +23,7 @@ dependencies:
   - profunctors
   - purescript-iso >= 0.0.6
   - stm
+  - text
   - transformers
   - wai-transformers >= 0.1.0
   - websockets >= 0.12.4

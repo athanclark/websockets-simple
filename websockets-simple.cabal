@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b98ae956d204813c5890089ab3a84fb41ddec7f7b20ebca4404a14d83e077400
+-- hash: 1e6f98dd9c608337079db8a32d160dd732718092aad95a0b2f091f43e454c9fe
 
 name:           websockets-simple
 version:        0.1.3
@@ -46,6 +46,7 @@ library
     , profunctors
     , purescript-iso >=0.0.6
     , stm
+    , text
     , transformers
     , wai-transformers >=0.1.0
     , websockets >=0.12.4
@@ -78,6 +79,7 @@ test-suite spec
     , stm
     , tasty
     , tasty-hspec
+    , text
     , transformers
     , wai-transformers >=0.1.0
     , websockets >=0.12.4
