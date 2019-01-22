@@ -14,7 +14,7 @@ module Network.WebSockets.Simple
     WebSocketsApp (..), WebSocketsAppParams (..)
   , Network.WebSockets.ConnectionException (..), CloseOrigin (..), WebSocketsSimpleError (..)
   , -- * Running
-    dimapJson, dimapStringify
+    dimap', dimapJson, dimapStringify
   , toClientAppT, toClientAppTString, toClientAppTBinary, toClientAppTBoth
   , accept
   , -- * Utilities
@@ -38,7 +38,7 @@ import Data.Singleton.Class (Extractable (..))
 
 import Control.Monad (forever)
 import Control.Monad.IO.Class (MonadIO (..))
-import Control.Monad.Catch (Exception, throwM, MonadThrow, catch, MonadCatch)
+import Control.Monad.Catch (Exception, MonadThrow, catch, throwM, MonadCatch)
 import Control.Monad.Trans.Control.Aligned (MonadBaseControl (..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM (atomically, newTVarIO, readTVarIO, writeTVar)
@@ -70,9 +70,9 @@ data CloseOrigin
 instance Profunctor (WebSocketsApp m) where
   dimap :: forall a b c d. (a -> b) -> (c -> d) -> WebSocketsApp m b c -> WebSocketsApp m a d
   dimap receiveF sendF WebSocketsApp{onOpen,onReceive,onClose} = WebSocketsApp
-    { onOpen = \params -> onOpen (getParams params)
-    , onReceive = \params r -> onReceive (getParams params) (receiveF r)
-    , onClose = \o e -> onClose o e
+    { onOpen = onOpen . getParams
+    , onReceive = \params -> onReceive (getParams params) . receiveF
+    , onClose = onClose
     }
     where
       getParams :: WebSocketsAppParams m d -> WebSocketsAppParams m c
@@ -107,24 +107,43 @@ instance Applicative m => Monoid (WebSocketsApp m receive send) where
     }
 
 
-dimapJson :: forall m receive send
-           . ToJSON send
+dimap' :: Monad m
+       => (receive' -> m receive)
+       -> (send -> send')
+       -> WebSocketsApp m receive send
+       -> WebSocketsApp m receive' send'
+dimap' from to WebSocketsApp{onReceive,onOpen,onClose} = WebSocketsApp
+  { onOpen = onOpen . newParams
+  , onClose
+  , onReceive = \params r -> from r >>= onReceive (newParams params)
+  }
+  where
+    newParams WebSocketsAppParams{send,close} = WebSocketsAppParams
+      { send = send . to
+      , close
+      }
+
+
+dimapJson :: ToJSON send
           => FromJSON receive
+          => MonadThrow m
           => WebSocketsApp m receive send
           -> WebSocketsApp m Value Value
-dimapJson = dimap fromJson toJSON
+dimapJson = dimap' fromJson toJSON
   where
-    fromJson :: Value -> receive
     fromJson x = case Aeson.parseMaybe parseJSON x of
-      Just y -> y
+      Nothing -> throwM (JSONValueError x)
+      Just y -> pure y
 
 
-dimapStringify :: WebSocketsApp m Value Value
+dimapStringify :: MonadThrow m
+               => WebSocketsApp m Value Value
                -> WebSocketsApp m Text Text
-dimapStringify = dimap fromJson (LT.decodeUtf8 . Aeson.encode)
+dimapStringify = dimap' fromJson (LT.decodeUtf8 . Aeson.encode)
   where
     fromJson x = case Aeson.decode (LT.encodeUtf8 x) of
-      Just y -> y
+      Nothing -> throwM (JSONParseError x)
+      Just y -> pure y
 
 
 
@@ -208,8 +227,8 @@ toClientAppTBoth textApp binApp conn = do
 
 
 
-accept :: ( MonadIO m
-          ) => ClientAppT m () -> ServerAppT m
+accept :: MonadIO m
+       => ClientAppT m () -> ServerAppT m
 accept wsApp pending =
   liftIO (acceptRequest pending) >>= wsApp
 
@@ -240,7 +259,8 @@ expBackoffStrategy action = do
 
 
 data WebSocketsSimpleError
-  = JSONParseError ByteString
+  = JSONParseError Text
+  | JSONValueError Value
   deriving (Generic, Eq, Show)
 
 instance Exception WebSocketsSimpleError
