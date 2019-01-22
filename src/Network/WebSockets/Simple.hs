@@ -14,8 +14,9 @@ module Network.WebSockets.Simple
     WebSocketsApp (..), WebSocketsAppParams (..)
   , Network.WebSockets.ConnectionException (..), CloseOrigin (..), WebSocketsSimpleError (..)
   , -- * Running
-    toClientAppT
-  , toServerAppT
+    dimapJson, dimapStringify
+  , toClientAppT, toClientAppTString, toClientAppTBinary, toClientAppTBoth
+  , accept
   , -- * Utilities
     expBackoffStrategy
   , hoistWebSocketsApp
@@ -207,16 +208,10 @@ toClientAppTBoth textApp binApp conn = do
 
 
 
-toServerAppT :: ( ToJSON send
-                , FromJSON receive
-                , MonadIO m
-                , MonadBaseControl IO m stM
-                , MonadThrow m
-                , MonadCatch m
-                , Extractable stM
-                ) => WebSocketsApp m receive send -> ServerAppT m
-toServerAppT wsApp pending =
-  liftIO (acceptRequest pending) >>= toClientAppT wsApp
+accept :: ( MonadIO m
+          ) => ClientAppT m () -> ServerAppT m
+accept wsApp pending =
+  liftIO (acceptRequest pending) >>= wsApp
 
 
 
