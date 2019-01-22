@@ -26,8 +26,10 @@ import Network.WebSockets
   , sendClose, receiveDataMessage, acceptRequest, ConnectionException (..))
 import Network.WebSockets.Trans (ServerAppT, ClientAppT)
 import Data.Profunctor (Profunctor (..))
-import Data.Aeson (ToJSON (..), FromJSON (..))
+import Data.Aeson (ToJSON (..), FromJSON (..), Value)
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Types as Aeson
+import Data.Maybe (fromMaybe)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy.Encoding as LT
 import Data.ByteString.Lazy (ByteString)
@@ -104,6 +106,27 @@ instance Applicative m => Monoid (WebSocketsApp m receive send) where
     }
 
 
+dimapJson :: forall m receive send
+           . ToJSON send
+          => FromJSON receive
+          => WebSocketsApp m receive send
+          -> WebSocketsApp m Value Value
+dimapJson = dimap fromJson toJSON
+  where
+    fromJson :: Value -> receive
+    fromJson x = case Aeson.parseMaybe parseJSON x of
+      Just y -> y
+
+
+dimapStringify :: WebSocketsApp m Value Value
+               -> WebSocketsApp m Text Text
+dimapStringify = dimap fromJson (LT.decodeUtf8 . Aeson.encode)
+  where
+    fromJson x = case Aeson.decode (LT.encodeUtf8 x) of
+      Just y -> y
+
+
+
 -- | This can throw a 'WebSocketSimpleError' to the main thread via 'Control.Concurrent.Async.link' when json parsing fails.
 toClientAppT :: forall send receive m stM
               . ToJSON send
@@ -115,32 +138,26 @@ toClientAppT :: forall send receive m stM
              => Extractable stM
              => WebSocketsApp m receive send
              -> ClientAppT m () -- WebSocketsAppThreads
-toClientAppT WebSocketsApp{onOpen,onReceive,onClose} conn = do
-  let send :: send -> m ()
-      send x = liftIO (sendTextData conn (Aeson.encode x)) `catch` onClose ClosedOnSend
+toClientAppT = toClientAppTString . dimapStringify . dimapJson
 
-      close :: m ()
-      close = liftIO (sendClose conn ("requesting close" :: ByteString)) `catch` (onClose ClosedOnClose)
 
-      params :: WebSocketsAppParams m send
-      params = WebSocketsAppParams{send,close}
+toClientAppTString :: MonadBaseControl IO m stM
+                   => Extractable stM
+                   => MonadCatch m
+                   => MonadIO m
+                   => WebSocketsApp m Text Text
+                   -> ClientAppT m ()
+toClientAppTString x = toClientAppTBoth x mempty
 
-  onOpen params
 
-  liftBaseWith $ \runInBase ->
-    let runM :: forall a. m a -> IO a
-        runM = fmap runSingleton . runInBase
 
-        go' :: IO ()
-        go' = forever $ do
-          data' <- receiveDataMessage conn
-          let data'' = case data' of
-                        Text xs _ -> xs
-                        Binary xs -> xs
-          case Aeson.decode data'' of
-            Nothing -> throwM (JSONParseError data'')
-            Just received -> runM (onReceive params received)
-    in  go' `catch` (runM . onClose ClosedOnReceive)
+toClientAppTBinary :: MonadBaseControl IO m stM
+                   => Extractable stM
+                   => MonadCatch m
+                   => MonadIO m
+                   => WebSocketsApp m ByteString ByteString
+                   -> ClientAppT m ()
+toClientAppTBinary = toClientAppTBoth mempty
 
 
 
@@ -154,9 +171,9 @@ toClientAppTBoth :: forall m stM
                  -> ClientAppT m ()
 toClientAppTBoth textApp binApp conn = do
   let sendText :: Text -> m ()
-      sendText x = liftIO (sendTextData conn x) `catch` (onClose textApp ClosedOnSend)
+      sendText x = liftIO (sendTextData conn x) `catch` onClose textApp ClosedOnSend
       sendBin :: ByteString -> m ()
-      sendBin x = liftIO (sendBinaryData conn x) `catch` (onClose binApp ClosedOnSend)
+      sendBin x = liftIO (sendBinaryData conn x) `catch` onClose binApp ClosedOnSend
       catchBoth :: ConnectionException -> m ()
       catchBoth e = do
         onClose textApp ClosedOnReceive e
@@ -182,9 +199,7 @@ toClientAppTBoth textApp binApp conn = do
           data' <- receiveDataMessage conn
           case data' of
             Text xs mt ->
-              let t = case mt of
-                        Nothing -> LT.decodeUtf8 xs
-                        Just t' -> t'
+              let t = fromMaybe (LT.decodeUtf8 xs) mt
               in  runM (onReceive textApp paramsText t)
             Binary xs ->
               runM (onReceive binApp paramsBin xs)
