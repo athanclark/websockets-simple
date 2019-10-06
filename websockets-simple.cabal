@@ -1,13 +1,13 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.1.
+-- This file has been generated from package.yaml by hpack version 0.31.2.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1e6f98dd9c608337079db8a32d160dd732718092aad95a0b2f091f43e454c9fe
+-- hash: d3277adc30d4a6957a76a3f79a3479037bce7a2d42c555a9723c781e58f09f61
 
 name:           websockets-simple
-version:        0.1.3
+version:        0.2.0
 synopsis:       Composable websockets clients
 description:    See README at <https://github.com/athanclark/websockets-simple#readme>
 category:       Web
@@ -27,7 +27,6 @@ source-repository head
 library
   exposed-modules:
       Network.WebSockets.Simple
-      Network.WebSockets.Simple.PingPong
       Test.WebSockets.Simple
   other-modules:
       Paths_websockets_simple
@@ -44,7 +43,6 @@ library
     , extractable-singleton >=0.0.1
     , monad-control-aligned >=0.0.1
     , profunctors
-    , purescript-iso >=0.0.6
     , stm
     , text
     , transformers
@@ -57,7 +55,6 @@ test-suite spec
   main-is: Spec.hs
   other-modules:
       Network.WebSockets.Simple
-      Network.WebSockets.Simple.PingPong
       Test.WebSockets.Simple
       Paths_websockets_simple
   hs-source-dirs:
@@ -75,7 +72,6 @@ test-suite spec
     , hspec
     , monad-control-aligned >=0.0.1
     , profunctors
-    , purescript-iso >=0.0.6
     , stm
     , tasty
     , tasty-hspec
